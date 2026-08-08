@@ -25,5 +25,6 @@ public class Clerge {
     
     @ManyToOne(targetEntity = Role.class)
     @Join
+    
 
 }
