@@ -1,36 +1,27 @@
 package com.anglikana.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 @Entity
 @Table(name = "utilisateur")
-@Data
-@Getter
-@Setter
-@AllArgsConstructor
-@NoArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Utilisateur {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
-    private String nom_utilisateur;
-    private String mot_de_passe;
-    private Boolean actif;
+    @Column(name = "nom_utilisateur", nullable = false, unique = true, length = 100)
+    private String nomUtilisateur;
 
-    @OneToOne(targetEntity = Clerge.class)
-    @JoinColumn(name = "clerge_id", referencedColumnName = "id")
-    private Clerge clerge_id;
+    @Column(name = "mot_de_passe", nullable = false, length = 255)
+    private String motDePasse;
 
+    @Builder.Default
+    private Boolean actif = true;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "clerge_id", unique = true)
+    private Clerge clerge;
 }

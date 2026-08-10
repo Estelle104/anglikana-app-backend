@@ -1,13 +1,12 @@
-
 package com.anglikana.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "role")
+@Table(name = "type_ressource")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Role {
+public class TypeRessource {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -15,9 +14,4 @@ public class Role {
 
     @Column(nullable = false, length = 100)
     private String nom;
-
-    private Integer niveau;
-
-    @Column(columnDefinition = "TEXT")
-    private String description;
 }
