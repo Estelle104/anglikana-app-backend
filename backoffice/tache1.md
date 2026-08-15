@@ -1,8 +1,8 @@
 1. ✅ POM
 2. ✅ Réorganiser les packages
 3. ✅ Modifier UtilisateurRepository
-4. ⬜ CustomUserDetailsService
-5. ⬜ PasswordEncoder
+4. ✅ CustomUserDetailsService
+5. ✅ PasswordEncoder
 6. ⬜ LoginRequest
 7. ⬜ LoginResponse
 8. ⬜ JwtService
