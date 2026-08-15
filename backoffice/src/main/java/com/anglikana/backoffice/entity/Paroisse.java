@@ -1,12 +1,13 @@
-package com.anglikana.entity;
+package com.anglikana.backoffice.entity;
+
 
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "region")
+@Table(name = "paroisse")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Region {
+public class Paroisse {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -15,9 +16,12 @@ public class Region {
     @Column(nullable = false, length = 150)
     private String nom;
 
+    @Column(name = "carte_qgis", length = 255)
+    private String carteQgis;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "diocese_id", nullable = false)
-    private Diocese diocese;
+    @JoinColumn(name = "district_id", nullable = false)
+    private District district;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "responsable_id")
