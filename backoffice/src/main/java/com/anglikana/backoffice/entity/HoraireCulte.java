@@ -1,4 +1,4 @@
-package com.anglikana.entity;
+package com.anglikana.backoffice.entity;
 
 
 import jakarta.persistence.*;
