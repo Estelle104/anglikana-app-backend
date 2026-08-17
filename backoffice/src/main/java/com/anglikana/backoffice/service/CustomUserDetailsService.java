@@ -1,5 +1,7 @@
 package com.anglikana.backoffice.service;
 
+import com.anglikana.backoffice.entity.Clerge;
+import com.anglikana.backoffice.entity.Role;
 import com.anglikana.backoffice.entity.Utilisateur;
 import com.anglikana.backoffice.repository.UtilisateurRepository;
 
@@ -15,9 +17,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     private final UtilisateurRepository utilisateurRepository;
 
-    public CustomUserDetailsService(
-            UtilisateurRepository utilisateurRepository) {
-
+    public CustomUserDetailsService(UtilisateurRepository utilisateurRepository) {
         this.utilisateurRepository = utilisateurRepository;
     }
 
@@ -26,13 +26,26 @@ public class CustomUserDetailsService implements UserDetailsService {
             throws UsernameNotFoundException {
 
         Utilisateur utilisateur = utilisateurRepository.findByNomUtilisateur(username)
-                        .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable : " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur introuvable : " + username));
+
+        String roleNom = extraireRole(utilisateur);
 
         return User.builder().username(utilisateur.getNomUtilisateur())
-                            .password(utilisateur.getMotDePasse())
-                            .disabled(!Boolean.TRUE.equals(utilisateur.getActif()))
-                            .roles(utilisateur).build();
+                .password(utilisateur.getMotDePasse()).disabled(!Boolean.TRUE.equals(utilisateur.getActif()))
+                .roles(roleNom).build();
     }
 
+    private String extraireRole(Utilisateur utilisateur) {
+        Clerge clerge = utilisateur.getClerge();
+        if (clerge == null) {
+            return "USER";
+        }
 
+        Role role = clerge.getRole();
+        if (role == null || role.getNom() == null) {
+            return "USER"; 
+        }
+
+        return role.getNom().toUpperCase();
+    }
 }
