@@ -13,7 +13,7 @@ public class PasswordEncoderTest {
         BCryptPasswordEncoder encoder =
                 new BCryptPasswordEncoder();
 
-        String motDePasse = "admin123";
+        String motDePasse = "rasoa123";
 
         String hash = encoder.encode(motDePasse);
 
