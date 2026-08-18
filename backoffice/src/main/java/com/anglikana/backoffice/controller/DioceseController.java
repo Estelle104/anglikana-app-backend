@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -29,16 +30,19 @@ public class DioceseController {
     @GetMapping
     public List<DioceseDTO> getAll() {
         return dioceseRepository.findAll()
-                .stream()
-                .map(this::toDTO)
-                .collect(Collectors.toList());
+                .stream().map(this::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<DioceseDTO> getById(@PathVariable Integer id) {
-        return dioceseRepository.findById(id)
-                .map(diocese -> ResponseEntity.ok(toDTO(diocese)))
-                .orElse(ResponseEntity.notFound().build());
+        Optional<Diocese> dioceseOptionnel = dioceseRepository.findById(id);
+
+        if (dioceseOptionnel.isPresent()) {
+            Diocese diocese = dioceseOptionnel.get(); 
+            return ResponseEntity.ok(toDTO(diocese));
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping
@@ -53,15 +57,18 @@ public class DioceseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DioceseDTO> update(@PathVariable Integer id,
-                                              @RequestBody DioceseDTO dto) {
-        return dioceseRepository.findById(id)
-                .map(diocese -> {
-                    appliquerDTO(diocese, dto);
-                    Diocese updated = dioceseRepository.save(diocese);
-                    return ResponseEntity.ok(toDTO(updated));
-                })
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<DioceseDTO> update(@PathVariable Integer id, @RequestBody DioceseDTO dto) {
+        Optional<Diocese> dioceseOptionnel = dioceseRepository.findById(id);
+
+        if (dioceseOptionnel.isPresent()) {
+            Diocese diocese = dioceseOptionnel.get(); 
+            
+            appliquerDTO(diocese, dto);
+            Diocese updated = dioceseRepository.save(diocese);
+            return ResponseEntity.ok(toDTO(updated));
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -81,9 +88,8 @@ public class DioceseController {
         dto.setCarteQgis(diocese.getCarteQgis());
         dto.setPresentation(diocese.getPresentation());
         dto.setCoordonnees(diocese.getCoordonnees());
-        dto.setResponsableId(
-                diocese.getResponsable() != null ? diocese.getResponsable().getId() : null
-        );
+        dto.setResponsableId(diocese.getResponsable() != null ? diocese.getResponsable().getId() : null);
+        
         return dto;
     }
 
@@ -94,9 +100,13 @@ public class DioceseController {
         diocese.setCoordonnees(dto.getCoordonnees());
 
         if (dto.getResponsableId() != null) {
-            Clerge clerge = clergeRepository.findById(dto.getResponsableId())
-                    .orElse(null);
-            diocese.setResponsable(clerge);
+            Optional<Clerge> clergeOptionnel = clergeRepository.findById(dto.getResponsableId());
+            
+            if (clergeOptionnel.isPresent()) {
+                diocese.setResponsable(clergeOptionnel.get());
+            } else {
+                diocese.setResponsable(null);
+            }
         } else {
             diocese.setResponsable(null);
         }
