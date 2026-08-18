@@ -26,7 +26,6 @@ public class DioceseController {
         this.clergeRepository = clergeRepository;
     }
 
-    // LECTURE — accessible à tout utilisateur authentifié (ADMIN ou USER)
     @GetMapping
     public List<DioceseDTO> getAll() {
         return dioceseRepository.findAll()
@@ -42,7 +41,6 @@ public class DioceseController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ÉCRITURE — réservée à ADMIN
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DioceseDTO> create(@RequestBody DioceseDTO dto) {
@@ -75,8 +73,6 @@ public class DioceseController {
         dioceseRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }
-
-    // --- Conversions entité <-> DTO ---
 
     private DioceseDTO toDTO(Diocese diocese) {
         DioceseDTO dto = new DioceseDTO();
