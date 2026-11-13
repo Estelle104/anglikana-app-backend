@@ -4,6 +4,9 @@ import com.anglikana.backoffice.entity.Paroisse;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface ParoisseRepository extends JpaRepository<Paroisse, Integer> {
+    List<Paroisse> findByDistrictIdOrderByNomAsc(Integer districtId);
 }

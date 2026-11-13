@@ -5,6 +5,7 @@ import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Eglise;
 import com.anglikana.backoffice.entity.Ressource;
 import com.anglikana.backoffice.entity.TypeRessource;
+import com.anglikana.backoffice.mapper.RessourceMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.EgliseRepository;
 import com.anglikana.backoffice.repository.RessourceRepository;
@@ -40,7 +41,7 @@ public class RessourceController {
     @GetMapping
     public List<RessourceDTO> getAll() {
         return ressourceRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(RessourceMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -49,7 +50,7 @@ public class RessourceController {
 
         if (ressourceOptionnel.isPresent()) {
             Ressource ressource = ressourceOptionnel.get();
-            return ResponseEntity.ok(toDTO(ressource));
+            return ResponseEntity.ok(RessourceMapper.toDTO(ressource));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -62,7 +63,7 @@ public class RessourceController {
         appliquerDTO(ressource, dto);
 
         Ressource saved = ressourceRepository.save(ressource);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(RessourceMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
@@ -74,7 +75,7 @@ public class RessourceController {
             Ressource ressource = ressourceOptionnel.get();
             appliquerDTO(ressource, dto);
             Ressource updated = ressourceRepository.save(ressource);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(RessourceMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -88,17 +89,6 @@ public class RessourceController {
         }
         ressourceRepository.deleteById(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private RessourceDTO toDTO(Ressource ressource) {
-        RessourceDTO dto = new RessourceDTO();
-        dto.setId(ressource.getId());
-        dto.setNom(ressource.getNom());
-        dto.setAdresse(ressource.getAdresse());
-        dto.setTypeId(ressource.getType() != null ? ressource.getType().getId() : null);
-        dto.setEgliseId(ressource.getEglise() != null ? ressource.getEglise().getId() : null);
-        dto.setResponsableId(ressource.getResponsable() != null ? ressource.getResponsable().getId() : null);
-        return dto;
     }
 
     private void appliquerDTO(Ressource ressource, RessourceDTO dto) {

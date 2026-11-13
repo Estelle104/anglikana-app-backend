@@ -36,6 +36,7 @@ CREATE TABLE diocese (
     carte_qgis      VARCHAR(255),
     presentation    TEXT,
     coordonnees     VARCHAR(100),
+    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_diocese_responsable
         FOREIGN KEY (responsable_id) REFERENCES clerge(id)
@@ -48,6 +49,7 @@ CREATE TABLE region (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
     diocese_id      INT NOT NULL,
+    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_region_diocese
         FOREIGN KEY (diocese_id) REFERENCES diocese(id)
@@ -64,6 +66,7 @@ CREATE TABLE district (
     nom             VARCHAR(150) NOT NULL,
     carte_qgis      VARCHAR(255),
     region_id       INT NOT NULL,
+    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_district_region
         FOREIGN KEY (region_id) REFERENCES region(id)
@@ -199,3 +202,20 @@ CREATE TABLE photo (
 -- Index utiles pour les relations polymorphes
 CREATE INDEX idx_photo_entite ON photo (type_entite, entite_id);
 CREATE INDEX idx_contribution_entite ON contribution (type_entite, entite_id);
+
+-- =========================================================
+-- SPRINT 2 : recherche, index hiérarchiques et spatiaux
+-- (voir migrations/V2__sprint2_geographie_statistiques.sql)
+-- =========================================================
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+CREATE INDEX idx_region_diocese    ON region    (diocese_id);
+CREATE INDEX idx_district_region   ON district  (region_id);
+CREATE INDEX idx_paroisse_district ON paroisse  (district_id);
+CREATE INDEX idx_eglise_paroisse   ON eglise    (paroisse_id);
+CREATE INDEX idx_ressource_eglise  ON ressource (eglise_id);
+
+CREATE INDEX idx_diocese_limite      ON diocese  USING GIST (limite);
+CREATE INDEX idx_region_limite       ON region   USING GIST (limite);
+CREATE INDEX idx_district_limite     ON district USING GIST (limite);
+CREATE INDEX idx_eglise_localisation ON eglise   USING GIST (localisation);

@@ -1,10 +1,13 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.dto.DioceseDTO;
+import com.anglikana.backoffice.dto.DistrictDTO;
+import com.anglikana.backoffice.dto.RegionDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Diocese;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
+import com.anglikana.backoffice.service.HierarchieService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -20,11 +23,14 @@ public class DioceseController {
 
     private final DioceseRepository dioceseRepository;
     private final ClergeRepository clergeRepository;
+    private final HierarchieService hierarchieService;
 
     public DioceseController(DioceseRepository dioceseRepository,
-                              ClergeRepository clergeRepository) {
+                              ClergeRepository clergeRepository,
+                              HierarchieService hierarchieService) {
         this.dioceseRepository = dioceseRepository;
         this.clergeRepository = clergeRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
@@ -43,6 +49,20 @@ public class DioceseController {
         } else {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @GetMapping("/{id}/regions")
+    public ResponseEntity<List<RegionDTO>> getRegions(@PathVariable Integer id) {
+        return hierarchieService.getRegionsDuDiocese(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}/districts")
+    public ResponseEntity<List<DistrictDTO>> getDistricts(@PathVariable Integer id) {
+        return hierarchieService.getDistrictsDuDiocese(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping

@@ -1,12 +1,15 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.dto.ParoisseDTO;
+import com.anglikana.backoffice.dto.EgliseDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.District;
 import com.anglikana.backoffice.entity.Paroisse;
+import com.anglikana.backoffice.mapper.ParoisseMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.ParoisseRepository;
+import com.anglikana.backoffice.service.HierarchieService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,19 +26,22 @@ public class ParoisseController {
     private final ParoisseRepository paroisseRepository;
     private final DistrictRepository districtRepository;
     private final ClergeRepository clergeRepository;
+    private final HierarchieService hierarchieService;
 
     public ParoisseController(ParoisseRepository paroisseRepository,
                                DistrictRepository districtRepository,
-                               ClergeRepository clergeRepository) {
+                               ClergeRepository clergeRepository,
+                               HierarchieService hierarchieService) {
         this.paroisseRepository = paroisseRepository;
         this.districtRepository = districtRepository;
         this.clergeRepository = clergeRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
     public List<ParoisseDTO> getAll() {
         return paroisseRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(ParoisseMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -44,10 +50,17 @@ public class ParoisseController {
 
         if (paroisseOptionnel.isPresent()) {
             Paroisse paroisse = paroisseOptionnel.get();
-            return ResponseEntity.ok(toDTO(paroisse));
+            return ResponseEntity.ok(ParoisseMapper.toDTO(paroisse));
         } else {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @GetMapping("/{id}/eglises")
+    public ResponseEntity<List<EgliseDTO>> getEglises(@PathVariable Integer id) {
+        return hierarchieService.getEglisesDeLaParoisse(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
@@ -57,7 +70,7 @@ public class ParoisseController {
         appliquerDTO(paroisse, dto);
 
         Paroisse saved = paroisseRepository.save(paroisse);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(ParoisseMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
@@ -69,7 +82,7 @@ public class ParoisseController {
             Paroisse paroisse = paroisseOptionnel.get();
             appliquerDTO(paroisse, dto);
             Paroisse updated = paroisseRepository.save(paroisse);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(ParoisseMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -83,16 +96,6 @@ public class ParoisseController {
         }
         paroisseRepository.deleteById(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private ParoisseDTO toDTO(Paroisse paroisse) {
-        ParoisseDTO dto = new ParoisseDTO();
-        dto.setId(paroisse.getId());
-        dto.setNom(paroisse.getNom());
-        dto.setCarteQgis(paroisse.getCarteQgis());
-        dto.setDistrictId(paroisse.getDistrict() != null ? paroisse.getDistrict().getId() : null);
-        dto.setResponsableId(paroisse.getResponsable() != null ? paroisse.getResponsable().getId() : null);
-        return dto;
     }
 
     private void appliquerDTO(Paroisse paroisse, ParoisseDTO dto) {
