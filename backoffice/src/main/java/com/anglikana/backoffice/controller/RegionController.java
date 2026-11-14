@@ -6,11 +6,13 @@ import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Diocese;
 import com.anglikana.backoffice.entity.Region;
 import com.anglikana.backoffice.mapper.RegionMapper;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -63,9 +65,13 @@ public class RegionController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<RegionDTO> create(@RequestBody RegionDTO dto) {
+    public ResponseEntity<?> create(@RequestBody RegionDTO dto) {
         Region region = new Region();
-        appliquerDTO(region, dto);
+        try {
+            appliquerDTO(region, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         Region saved = regionRepository.save(region);
         return ResponseEntity.status(201).body(RegionMapper.toDTO(saved));
@@ -73,12 +79,16 @@ public class RegionController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<RegionDTO> update(@PathVariable Integer id, @RequestBody RegionDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody RegionDTO dto) {
         Optional<Region> regionOptionnel = regionRepository.findById(id);
 
         if (regionOptionnel.isPresent()) {
             Region region = regionOptionnel.get();
-            appliquerDTO(region, dto);
+            try {
+                appliquerDTO(region, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             Region updated = regionRepository.save(region);
             return ResponseEntity.ok(RegionMapper.toDTO(updated));
         } else {
@@ -97,6 +107,8 @@ public class RegionController {
     }
 
     private void appliquerDTO(Region region, RegionDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        region.setCarteQgis(carteQgis);
         region.setNom(dto.getNom());
 
         if (dto.getDioceseId() != null) {

@@ -2,6 +2,10 @@ package com.anglikana.backoffice.sprint2;
 
 import com.anglikana.backoffice.config.SecurityConfig;
 import com.anglikana.backoffice.controller.DioceseController;
+import com.anglikana.backoffice.controller.DistrictController;
+import com.anglikana.backoffice.entity.District;
+import com.anglikana.backoffice.repository.DistrictRepository;
+import com.anglikana.backoffice.repository.RegionRepository;
 import com.anglikana.backoffice.controller.GeographieController;
 import com.anglikana.backoffice.controller.TableauBordController;
 import com.anglikana.backoffice.dto.ImportLimitesResultatDTO;
@@ -41,12 +45,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {TableauBordController.class, GeographieController.class, DioceseController.class})
+@WebMvcTest(controllers = {TableauBordController.class, GeographieController.class, DioceseController.class,
+        DistrictController.class})
 @Import(SecurityConfig.class)
 class Sprint2ControllerTest {
 
@@ -58,6 +64,8 @@ class Sprint2ControllerTest {
     @MockitoBean private GeographieService geographieService;
     @MockitoBean private HierarchieService hierarchieService;
     @MockitoBean private DioceseRepository dioceseRepository;
+    @MockitoBean private DistrictRepository districtRepository;
+    @MockitoBean private RegionRepository regionRepository;
     @MockitoBean private ClergeRepository clergeRepository;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private CustomUserDetailsService userDetailsService;
@@ -83,6 +91,59 @@ class Sprint2ControllerTest {
         when(hierarchieService.getRegionsDuDiocese(9)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/dioceses/9/regions")).andExpect(status().isNotFound());
+    }
+
+    // ------------------------------------------------------------------ Carte QGIS (CRUD)
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void carteQgisEnregistreeEtRenvoyeeEnGeoJson() throws Exception {
+        when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
+        when(districtRepository.save(any(District.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mockMvc.perform(put("/api/districts/1").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"nom": "Tana", "carteQgis": {"type": "Polygon",
+                         "coordinates": [[[47,-19],[48,-19],[48,-18],[47,-18],[47,-19]]]}}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.carteQgis.type").value("Polygon"))
+                .andExpect(jsonPath("$.carteQgis.coordinates[0][1][0]").value(48.0));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void carteQgisSansCarte() throws Exception {
+        when(districtRepository.save(any(District.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        mockMvc.perform(post("/api/districts").contentType(MediaType.APPLICATION_JSON).content("{\"nom\": \"Tana\", \"carteQgis\": null}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.carteQgis").isEmpty());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void carteQgisInvalideRefusee() throws Exception {
+        when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
+
+        mockMvc.perform(put("/api/districts/1").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nom\": \"Tana\", \"carteQgis\": \"maps/district_tana_ville.qgz\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("GeoJSON Polygon")));
+        verify(districtRepository, never()).save(any());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void carteQgisEnPlusieursPartiesRefusee() throws Exception {
+        when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
+
+        mockMvc.perform(put("/api/districts/1").contentType(MediaType.APPLICATION_JSON).content("""
+                        {"nom": "Tana", "carteQgis": {"type": "MultiPolygon", "coordinates": [
+                         [[[47,-19],[48,-19],[48,-18],[47,-19]]], [[[49,-19],[50,-19],[50,-18],[49,-19]]]]}}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("seul tenant")));
+        verify(districtRepository, never()).save(any());
     }
 
     // ------------------------------------------------------------------ Tableau de bord
@@ -159,7 +220,7 @@ class Sprint2ControllerTest {
     @Test
     void limitesRenvoyeesEnGeoJsonExploitableDirectement() throws Exception {
         ZoneFeatureDTO feature = new ZoneFeatureDTO(new ReferenceEntiteDTO(NiveauHierarchique.REGION, 2, "Région"),
-                "{\"type\":\"MultiPolygon\",\"coordinates\":[[[[47,-19],[48,-19],[48,-18],[47,-19]]]]}");
+                "{\"type\":\"Polygon\",\"coordinates\":[[[47,-19],[48,-19],[48,-18],[47,-19]]]}");
         when(geographieService.getLimites(NiveauHierarchique.REGION)).thenReturn(new ZoneFeatureCollectionDTO(List.of(feature)));
 
         mockMvc.perform(get("/api/geographie/region/limites"))
@@ -167,8 +228,8 @@ class Sprint2ControllerTest {
                 .andExpect(jsonPath("$.type").value("FeatureCollection"))
                 .andExpect(jsonPath("$.features[0].type").value("Feature"))
                 .andExpect(jsonPath("$.features[0].properties.niveau").value("region"))
-                .andExpect(jsonPath("$.features[0].geometry.type").value("MultiPolygon"))
-                .andExpect(jsonPath("$.features[0].geometry.coordinates[0][0][0][0]").value(47));
+                .andExpect(jsonPath("$.features[0].geometry.type").value("Polygon"))
+                .andExpect(jsonPath("$.features[0].geometry.coordinates[0][0][0]").value(47));
     }
 
     @Test

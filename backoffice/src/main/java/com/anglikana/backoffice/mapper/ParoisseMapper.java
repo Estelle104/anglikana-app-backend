@@ -12,7 +12,7 @@ public final class ParoisseMapper {
         ParoisseDTO dto = new ParoisseDTO();
         dto.setId(paroisse.getId());
         dto.setNom(paroisse.getNom());
-        dto.setCarteQgis(paroisse.getCarteQgis());
+        dto.setCarteQgis(GeometrieMapper.versGeoJson(paroisse.getCarteQgis()));
         dto.setDistrictId(paroisse.getDistrict() != null ? paroisse.getDistrict().getId() : null);
         dto.setResponsableId(paroisse.getResponsable() != null ? paroisse.getResponsable().getId() : null);
         return dto;

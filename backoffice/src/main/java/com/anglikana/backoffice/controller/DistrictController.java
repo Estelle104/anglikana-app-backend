@@ -6,11 +6,13 @@ import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.District;
 import com.anglikana.backoffice.entity.Region;
 import com.anglikana.backoffice.mapper.DistrictMapper;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -65,9 +67,13 @@ public class DistrictController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DistrictDTO> create(@RequestBody DistrictDTO dto) {
+    public ResponseEntity<?> create(@RequestBody DistrictDTO dto) {
         District district = new District();
-        appliquerDTO(district, dto);
+        try {
+            appliquerDTO(district, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         District saved = districtRepository.save(district);
         return ResponseEntity.status(201).body(DistrictMapper.toDTO(saved));
@@ -75,12 +81,16 @@ public class DistrictController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DistrictDTO> update(@PathVariable Integer id, @RequestBody DistrictDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody DistrictDTO dto) {
         Optional<District> districtOptionnel = districtRepository.findById(id);
 
         if (districtOptionnel.isPresent()) {
             District district = districtOptionnel.get();
-            appliquerDTO(district, dto);
+            try {
+                appliquerDTO(district, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             District updated = districtRepository.save(district);
             return ResponseEntity.ok(DistrictMapper.toDTO(updated));
         } else {
@@ -99,8 +109,9 @@ public class DistrictController {
     }
 
     private void appliquerDTO(District district, DistrictDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        district.setCarteQgis(carteQgis);
         district.setNom(dto.getNom());
-        district.setCarteQgis(dto.getCarteQgis());
 
         if (dto.getRegionId() != null) {
             Optional<Region> regionOptionnel = regionRepository.findById(dto.getRegionId());

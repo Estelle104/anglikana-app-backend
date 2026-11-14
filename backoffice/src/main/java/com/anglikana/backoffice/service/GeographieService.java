@@ -9,23 +9,21 @@ import com.anglikana.backoffice.dto.ResultatRechercheDTO;
 import com.anglikana.backoffice.dto.ZoneFeatureCollectionDTO;
 import com.anglikana.backoffice.dto.ZoneFeatureDTO;
 import com.anglikana.backoffice.dto.ZoneGeographiqueDTO;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.GeographieRepository;
 import com.anglikana.backoffice.repository.GeographieRepository.LigneRecherche;
 import com.anglikana.backoffice.repository.GeographieRepository.LigneZone;
 import com.anglikana.backoffice.repository.HierarchieStatistiqueRepository;
 
-import jakarta.persistence.PersistenceException;
-import org.springframework.dao.DataAccessException;
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -35,8 +33,6 @@ import java.util.stream.Stream;
  */
 @Service
 public class GeographieService {
-
-    private static final Set<String> TYPES_SURFACIQUES = Set.of("Polygon", "MultiPolygon");
 
     private final GeographieRepository geographieRepository;
     private final HierarchieStatistiqueRepository statistiqueRepository;
@@ -113,10 +109,11 @@ public class GeographieService {
 
     /**
      * Importe les limites d'un niveau depuis une FeatureCollection GeoJSON exportée de QGIS.
-     * Les features sans identifiant ou non surfaciques sont ignorées et signalées ;
-     * une géométrie rejetée par PostGIS annule l'ensemble de l'import.
+     * Chaque géométrie suit les mêmes règles que la saisie CRUD ({@link GeometrieMapper}) :
+     * un Polygon d'un seul tenant en WGS 84. Les features refusées (identifiant manquant,
+     * géométrie non conforme) sont ignorées et signalées ; les autres sont importées.
      *
-     * @throws IllegalArgumentException si le document ou une géométrie est invalide
+     * @throws IllegalArgumentException si le document n'est pas une FeatureCollection
      */
     @Transactional
     public ImportLimitesResultatDTO importerLimites(NiveauHierarchique niveau, ImportLimitesRequest request) {
@@ -141,19 +138,19 @@ public class GeographieService {
                 continue;
             }
 
-            JsonNode geometrie = feature.getGeometry();
-            String type = geometrie != null && geometrie.has("type") ? geometrie.get("type").asString() : null;
-            if (!TYPES_SURFACIQUES.contains(type)) {
-                resultat.getErreurs().add("Feature n°" + rang + " (id " + id + ") : géométrie Polygon ou MultiPolygon attendue");
+            Polygon carte;
+            try {
+                carte = GeometrieMapper.depuisGeoJson(feature.getGeometry());
+            } catch (IllegalArgumentException e) {
+                resultat.getErreurs().add("Feature n°" + rang + " (id " + id + ") : " + e.getMessage());
+                continue;
+            }
+            if (carte == null) {
+                resultat.getErreurs().add("Feature n°" + rang + " (id " + id + ") : géométrie absente");
                 continue;
             }
 
-            int lignes;
-            try {
-                lignes = geographieRepository.majLimite(niveau, id, geometrie.toString());
-            } catch (DataAccessException | PersistenceException e) {
-                throw new IllegalArgumentException("Géométrie GeoJSON invalide pour la zone " + id, e);
-            }
+            int lignes = geographieRepository.majCarteQgis(niveau, id, GeometrieMapper.versGeoJson(carte).toString());
 
             if (lignes == 0) {
                 resultat.getIdsInconnus().add(id);

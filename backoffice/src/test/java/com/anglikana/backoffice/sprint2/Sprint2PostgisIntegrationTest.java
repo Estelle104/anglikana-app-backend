@@ -8,6 +8,10 @@ import com.anglikana.backoffice.dto.ImportLimitesResultatDTO;
 import com.anglikana.backoffice.dto.NiveauHierarchique;
 import com.anglikana.backoffice.dto.NoeudHierarchiqueDTO;
 import com.anglikana.backoffice.dto.ReferenceEntiteDTO;
+import com.anglikana.backoffice.dto.RegionDTO;
+import com.anglikana.backoffice.entity.Region;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
+import com.anglikana.backoffice.mapper.RegionMapper;
 import com.anglikana.backoffice.dto.ResultatRechercheDTO;
 import com.anglikana.backoffice.dto.StatistiquesEntiteDTO;
 import com.anglikana.backoffice.dto.TableauBordDTO;
@@ -236,7 +240,7 @@ class Sprint2PostgisIntegrationTest {
 
     @Test
     void eglisesDansLePolygoneFrontiereIncluse() {
-        geographieRepository.majLimite(NiveauHierarchique.DISTRICT, donnees.di1.getId(), JeuDonneesHierarchie.CARRE_DI1);
+        geographieRepository.majCarteQgis(NiveauHierarchique.DISTRICT, donnees.di1.getId(), JeuDonneesHierarchie.CARRE_DI1);
 
         List<EgliseLocaliseeDTO> dansZone = geographieRepository.eglisesDansZone(NiveauHierarchique.DISTRICT, donnees.di1.getId());
         // E1 à l'intérieur, E2 sur la frontière (ST_Covers), E4 à l'intérieur bien que rattachée à Di2.
@@ -248,6 +252,28 @@ class Sprint2PostgisIntegrationTest {
         assertThat(horsZone).extracting(EgliseLocaliseeDTO::getId).containsExactly(donnees.e3.getId());
         assertThat(horsZone.get(0).getLongitude()).isEqualTo(49.5);
         assertThat(horsZone.get(0).getParoisseNom()).isEqualTo(donnees.p1.getNom());
+    }
+
+    @Test
+    void carteQgisEnregistreeParLeCrudEstUtiliseeParLaCarte() {
+        // Chemin du CRUD : DTO GeoJSON → entité JPA (Polygon) → colonne carte_qgis.
+        donnees.r2.setCarteQgis(GeometrieMapper.depuisGeoJson(JSON.readTree(JeuDonneesHierarchie.CARRE_DI1)));
+        em.flush();
+        em.clear();
+
+        // Lecture par la carte (SQL natif PostGIS).
+        ZoneGeographiqueDTO zone = geographieService.getZone(NiveauHierarchique.REGION, donnees.r2.getId()).orElseThrow();
+        assertThat(zone.isLimiteDisponible()).isTrue();
+        assertThat(zone.getFeature().getGeometry()).startsWith("{\"type\":\"Polygon\"");
+        assertThat(zone.getEglises()).extracting(EgliseLocaliseeDTO::getId)
+                .contains(donnees.e1.getId(), donnees.e2.getId(), donnees.e4.getId());
+        // Toutes les églises localisées de R1 sont hors de R2 : aucune n'est rattachée à R2.
+        assertThat(zone.getEglisesHorsZone()).isEmpty();
+
+        // Relecture par le CRUD : entité → DTO GeoJSON.
+        RegionDTO dto = RegionMapper.toDTO(em.find(Region.class, donnees.r2.getId()));
+        assertThat(dto.getCarteQgis().get("type").asString()).isEqualTo("Polygon");
+        assertThat(GeometrieMapper.depuisGeoJson(dto.getCarteQgis()).getArea()).isEqualTo(1.0);
     }
 
     @Test
@@ -277,7 +303,7 @@ class Sprint2PostgisIntegrationTest {
         List<ZoneFeatureDTO> couche = geographieService.getLimites(NiveauHierarchique.DISTRICT).getFeatures();
         ZoneFeatureDTO feature = couche.stream()
                 .filter(f -> f.getProperties().getId().equals(donnees.di1.getId())).findFirst().orElseThrow();
-        assertThat(feature.getGeometry()).startsWith("{\"type\":\"MultiPolygon\"");
+        assertThat(feature.getGeometry()).startsWith("{\"type\":\"Polygon\"");
         assertThat(couche).noneMatch(f -> f.getProperties().getId().equals(donnees.di2.getId()));
 
         ZoneGeographiqueDTO zone = geographieService.getZone(NiveauHierarchique.DISTRICT, donnees.di1.getId()).orElseThrow();
@@ -291,12 +317,31 @@ class Sprint2PostgisIntegrationTest {
     }
 
     @Test
-    void geometrieRejeteeParPostgisAnnuleLImport() {
-        ImportLimitesRequest request = collection(feature(donnees.di1.getId(), "{\"type\":\"Polygon\",\"coordinates\":[[[47]]]}"));
+    void geometriesNonConformesSignaleesSansBloquerLImport() {
+        String deuxParties = "{\"type\":\"MultiPolygon\",\"coordinates\":["
+                + "[[[47,-19],[48,-19],[48,-18],[47,-19]]],[[[49,-19],[50,-19],[50,-18],[49,-19]]]]}";
+
+        ImportLimitesResultatDTO resultat = geographieService.importerLimites(NiveauHierarchique.DISTRICT, collection(
+                feature(donnees.di1.getId(), JeuDonneesHierarchie.CARRE_DI1),
+                feature(donnees.di2.getId(), "{\"type\":\"Polygon\",\"coordinates\":[[[47]]]}"),
+                feature(donnees.di2.getId(), deuxParties)));
+
+        assertThat(resultat.getZonesMisesAJour()).isEqualTo(1);
+        assertThat(resultat.getErreurs()).hasSize(2);
+        assertThat(resultat.getErreurs().get(0)).contains("Feature n°2").contains("4 positions");
+        assertThat(resultat.getErreurs().get(1)).contains("Feature n°3").contains("seul tenant");
+        assertThat(geographieService.getZone(NiveauHierarchique.DISTRICT, donnees.di2.getId()).orElseThrow()
+                .isLimiteDisponible()).isFalse();
+    }
+
+    @Test
+    void documentQuiNEstPasUneFeatureCollectionRefuse() {
+        ImportLimitesRequest request = new ImportLimitesRequest();
+        request.setType("Feature");
 
         assertThatThrownBy(() -> geographieService.importerLimites(NiveauHierarchique.DISTRICT, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Géométrie GeoJSON invalide");
+                .hasMessageContaining("FeatureCollection");
     }
 
     @Test

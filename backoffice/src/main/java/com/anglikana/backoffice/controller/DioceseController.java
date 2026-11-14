@@ -5,10 +5,12 @@ import com.anglikana.backoffice.dto.DistrictDTO;
 import com.anglikana.backoffice.dto.RegionDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Diocese;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -67,9 +69,13 @@ public class DioceseController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DioceseDTO> create(@RequestBody DioceseDTO dto) {
+    public ResponseEntity<?> create(@RequestBody DioceseDTO dto) {
         Diocese diocese = new Diocese();
-        appliquerDTO(diocese, dto);
+        try {
+            appliquerDTO(diocese, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         Diocese saved = dioceseRepository.save(diocese);
         return ResponseEntity.status(201).body(toDTO(saved));
@@ -77,13 +83,17 @@ public class DioceseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DioceseDTO> update(@PathVariable Integer id, @RequestBody DioceseDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody DioceseDTO dto) {
         Optional<Diocese> dioceseOptionnel = dioceseRepository.findById(id);
 
         if (dioceseOptionnel.isPresent()) {
             Diocese diocese = dioceseOptionnel.get(); 
             
-            appliquerDTO(diocese, dto);
+            try {
+                appliquerDTO(diocese, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             Diocese updated = dioceseRepository.save(diocese);
             return ResponseEntity.ok(toDTO(updated));
         } else {
@@ -105,7 +115,7 @@ public class DioceseController {
         DioceseDTO dto = new DioceseDTO();
         dto.setId(diocese.getId());
         dto.setNom(diocese.getNom());
-        dto.setCarteQgis(diocese.getCarteQgis());
+        dto.setCarteQgis(GeometrieMapper.versGeoJson(diocese.getCarteQgis()));
         dto.setPresentation(diocese.getPresentation());
         dto.setCoordonnees(diocese.getCoordonnees());
         dto.setResponsableId(diocese.getResponsable() != null ? diocese.getResponsable().getId() : null);
@@ -114,8 +124,9 @@ public class DioceseController {
     }
 
     private void appliquerDTO(Diocese diocese, DioceseDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        diocese.setCarteQgis(carteQgis);
         diocese.setNom(dto.getNom());
-        diocese.setCarteQgis(dto.getCarteQgis());
         diocese.setPresentation(dto.getPresentation());
         diocese.setCoordonnees(dto.getCoordonnees());
 

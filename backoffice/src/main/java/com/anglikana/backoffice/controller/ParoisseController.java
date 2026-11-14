@@ -6,11 +6,13 @@ import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.District;
 import com.anglikana.backoffice.entity.Paroisse;
 import com.anglikana.backoffice.mapper.ParoisseMapper;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.ParoisseRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -65,9 +67,13 @@ public class ParoisseController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ParoisseDTO> create(@RequestBody ParoisseDTO dto) {
+    public ResponseEntity<?> create(@RequestBody ParoisseDTO dto) {
         Paroisse paroisse = new Paroisse();
-        appliquerDTO(paroisse, dto);
+        try {
+            appliquerDTO(paroisse, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         Paroisse saved = paroisseRepository.save(paroisse);
         return ResponseEntity.status(201).body(ParoisseMapper.toDTO(saved));
@@ -75,12 +81,16 @@ public class ParoisseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ParoisseDTO> update(@PathVariable Integer id, @RequestBody ParoisseDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody ParoisseDTO dto) {
         Optional<Paroisse> paroisseOptionnel = paroisseRepository.findById(id);
 
         if (paroisseOptionnel.isPresent()) {
             Paroisse paroisse = paroisseOptionnel.get();
-            appliquerDTO(paroisse, dto);
+            try {
+                appliquerDTO(paroisse, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             Paroisse updated = paroisseRepository.save(paroisse);
             return ResponseEntity.ok(ParoisseMapper.toDTO(updated));
         } else {
@@ -99,8 +109,9 @@ public class ParoisseController {
     }
 
     private void appliquerDTO(Paroisse paroisse, ParoisseDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        paroisse.setCarteQgis(carteQgis);
         paroisse.setNom(dto.getNom());
-        paroisse.setCarteQgis(dto.getCarteQgis());
 
         if (dto.getDistrictId() != null) {
             Optional<District> districtOptionnel = districtRepository.findById(dto.getDistrictId());

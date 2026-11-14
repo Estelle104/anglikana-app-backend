@@ -1,6 +1,15 @@
 -- =========================================================
--- SPRINT 2 : limites géographiques (QGIS) et index de consultation
--- Script idempotent et non destructif : aucune donnée existante n'est modifiée.
+-- SPRINT 2 : cartes QGIS stockées en polygones PostGIS et index de consultation
+--
+-- carte_qgis passe de VARCHAR (chemin d'un fichier .qgz) à GEOMETRY(Polygon, 4326) :
+-- la colonne contient désormais directement la limite de la zone.
+--   - diocese, district, paroisse : colonne convertie ;
+--   - region : colonne ajoutée (la table n'en avait pas).
+-- Les anciennes valeurs (chemins de fichiers .qgz) ne sont pas convertibles en polygones :
+-- elles sont remplacées par NULL, et les cartes sont à importer depuis QGIS.
+--
+-- Script idempotent : une colonne déjà convertie n'est jamais retouchée
+-- (une seconde exécution ne peut pas effacer les polygones importés).
 -- Annulation : V2__sprint2_geographie_statistiques_rollback.sql
 -- =========================================================
 
@@ -8,19 +17,35 @@
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
 -- ---------------------------------------------------------
--- Limites géographiques des zones (polygones exportés de QGIS)
+-- Conversion de carte_qgis en polygone
 -- SRID 4326 (WGS 84), identique à eglise.localisation : aucune transformation
 -- n'est nécessaire pour les requêtes spatiales.
--- MultiPolygon : une zone peut être composée de plusieurs parties (îles...).
+-- Polygon : chaque zone est d'un seul tenant (une seule surface, trous autorisés).
 -- ---------------------------------------------------------
-ALTER TABLE diocese  ADD COLUMN IF NOT EXISTS limite GEOMETRY(MultiPolygon, 4326);
-ALTER TABLE region   ADD COLUMN IF NOT EXISTS limite GEOMETRY(MultiPolygon, 4326);
-ALTER TABLE district ADD COLUMN IF NOT EXISTS limite GEOMETRY(MultiPolygon, 4326);
+DO $$
+DECLARE
+    nom_table TEXT;
+BEGIN
+    FOREACH nom_table IN ARRAY ARRAY['diocese', 'district', 'paroisse'] LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = current_schema()
+                     AND table_name = nom_table
+                     AND column_name = 'carte_qgis'
+                     AND data_type = 'character varying') THEN
+            EXECUTE format(
+                'ALTER TABLE %I ALTER COLUMN carte_qgis TYPE GEOMETRY(Polygon, 4326) USING NULL',
+                nom_table);
+        END IF;
+    END LOOP;
+END $$;
+
+ALTER TABLE region ADD COLUMN IF NOT EXISTS carte_qgis GEOMETRY(Polygon, 4326);
 
 -- Index spatiaux : églises contenues dans une zone (ST_Covers)
-CREATE INDEX IF NOT EXISTS idx_diocese_limite       ON diocese  USING GIST (limite);
-CREATE INDEX IF NOT EXISTS idx_region_limite        ON region   USING GIST (limite);
-CREATE INDEX IF NOT EXISTS idx_district_limite      ON district USING GIST (limite);
+CREATE INDEX IF NOT EXISTS idx_diocese_carte_qgis   ON diocese  USING GIST (carte_qgis);
+CREATE INDEX IF NOT EXISTS idx_region_carte_qgis    ON region   USING GIST (carte_qgis);
+CREATE INDEX IF NOT EXISTS idx_district_carte_qgis  ON district USING GIST (carte_qgis);
+CREATE INDEX IF NOT EXISTS idx_paroisse_carte_qgis  ON paroisse USING GIST (carte_qgis);
 CREATE INDEX IF NOT EXISTS idx_eglise_localisation  ON eglise   USING GIST (localisation);
 
 -- ---------------------------------------------------------

@@ -33,10 +33,9 @@ CREATE TABLE clerge (
 CREATE TABLE diocese (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     presentation    TEXT,
     coordonnees     VARCHAR(100),
-    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_diocese_responsable
         FOREIGN KEY (responsable_id) REFERENCES clerge(id)
@@ -48,8 +47,8 @@ CREATE TABLE diocese (
 CREATE TABLE region (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     diocese_id      INT NOT NULL,
-    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_region_diocese
         FOREIGN KEY (diocese_id) REFERENCES diocese(id)
@@ -64,9 +63,8 @@ CREATE TABLE region (
 CREATE TABLE district (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     region_id       INT NOT NULL,
-    limite          GEOMETRY(MultiPolygon, 4326),
     responsable_id  INT,
     CONSTRAINT fk_district_region
         FOREIGN KEY (region_id) REFERENCES region(id)
@@ -81,7 +79,7 @@ CREATE TABLE district (
 CREATE TABLE paroisse (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     district_id     INT NOT NULL,
     responsable_id  INT,
     CONSTRAINT fk_paroisse_district
@@ -215,7 +213,8 @@ CREATE INDEX idx_paroisse_district ON paroisse  (district_id);
 CREATE INDEX idx_eglise_paroisse   ON eglise    (paroisse_id);
 CREATE INDEX idx_ressource_eglise  ON ressource (eglise_id);
 
-CREATE INDEX idx_diocese_limite      ON diocese  USING GIST (limite);
-CREATE INDEX idx_region_limite       ON region   USING GIST (limite);
-CREATE INDEX idx_district_limite     ON district USING GIST (limite);
+CREATE INDEX idx_diocese_carte_qgis  ON diocese  USING GIST (carte_qgis);
+CREATE INDEX idx_region_carte_qgis   ON region   USING GIST (carte_qgis);
+CREATE INDEX idx_district_carte_qgis ON district USING GIST (carte_qgis);
+CREATE INDEX idx_paroisse_carte_qgis ON paroisse USING GIST (carte_qgis);
 CREATE INDEX idx_eglise_localisation ON eglise   USING GIST (localisation);

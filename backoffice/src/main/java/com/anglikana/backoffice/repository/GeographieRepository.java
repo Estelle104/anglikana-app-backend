@@ -15,11 +15,11 @@ import java.util.Optional;
 /**
  * Requêtes spatiales PostGIS sur les limites des zones (diocèse, région, district).
  *
- * <p>Limites ({@code limite}) et localisations des églises sont stockées en SRID 4326 (WGS 84) :
+ * <p>Limites (colonne {@code carte_qgis}, polygones QGIS) et localisations des églises sont stockées en SRID 4326 (WGS 84) :
  * les comparaisons spatiales se font sans transformation. Les géométries sont renvoyées
  * en GeoJSON (RFC 7946, ordre longitude/latitude) par {@code ST_AsGeoJSON}.</p>
  *
- * <p>Appartenance d'une église à une zone : {@code ST_Covers(limite, localisation)}, qui inclut
+ * <p>Appartenance d'une église à une zone : {@code ST_Covers(carte_qgis, localisation)}, qui inclut
  * les points situés exactement sur la frontière (contrairement à {@code ST_Contains}) et
  * exploite les index GIST.</p>
  *
@@ -59,9 +59,9 @@ public class GeographieRepository {
     /** Zones d'un niveau disposant d'une limite géographique. */
     public List<LigneZone> limites(NiveauHierarchique niveau) {
         String sql = """
-                SELECT z.id, z.nom, ST_AsGeoJSON(z.limite, %d) AS geojson
+                SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson
                 FROM %s z
-                WHERE z.limite IS NOT NULL
+                WHERE z.carte_qgis IS NOT NULL
                 ORDER BY z.nom
                 """.formatted(PRECISION_GEOJSON, table(niveau));
         return versZones(entityManager.createNativeQuery(sql, Tuple.class).getResultList());
@@ -69,7 +69,7 @@ public class GeographieRepository {
 
     public Optional<LigneZone> zone(NiveauHierarchique niveau, Integer id) {
         String sql = """
-                SELECT z.id, z.nom, ST_AsGeoJSON(z.limite, %d) AS geojson
+                SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson
                 FROM %s z
                 WHERE z.id = :id
                 """.formatted(PRECISION_GEOJSON, table(niveau));
@@ -80,10 +80,10 @@ public class GeographieRepository {
     /** Zones du niveau géographique inférieur rattachées à la zone et disposant d'une limite. */
     public List<LigneZone> sousZones(NiveauHierarchique niveau, Integer id) {
         String sql = switch (niveau) {
-            case DIOCESE -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.limite, %d) AS geojson FROM region z "
-                    + "WHERE z.diocese_id = :id AND z.limite IS NOT NULL ORDER BY z.nom";
-            case REGION -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.limite, %d) AS geojson FROM district z "
-                    + "WHERE z.region_id = :id AND z.limite IS NOT NULL ORDER BY z.nom";
+            case DIOCESE -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson FROM region z "
+                    + "WHERE z.diocese_id = :id AND z.carte_qgis IS NOT NULL ORDER BY z.nom";
+            case REGION -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson FROM district z "
+                    + "WHERE z.region_id = :id AND z.carte_qgis IS NOT NULL ORDER BY z.nom";
             default -> null;
         };
         if (sql == null) {
@@ -97,7 +97,7 @@ public class GeographieRepository {
     public List<EgliseLocaliseeDTO> eglisesDansZone(NiveauHierarchique niveau, Integer id) {
         String sql = SELECT_EGLISE_LOCALISEE + """
                 FROM %s z
-                JOIN eglise e ON ST_Covers(z.limite, e.localisation)
+                JOIN eglise e ON ST_Covers(z.carte_qgis, e.localisation)
                 JOIN paroisse pa ON pa.id = e.paroisse_id
                 WHERE z.id = :id
                 ORDER BY e.nom
@@ -111,8 +111,8 @@ public class GeographieRepository {
                 JOIN %s z ON z.id = %s
                 WHERE %s = :id
                   AND e.localisation IS NOT NULL
-                  AND z.limite IS NOT NULL
-                  AND NOT ST_Covers(z.limite, e.localisation)
+                  AND z.carte_qgis IS NOT NULL
+                  AND NOT ST_Covers(z.carte_qgis, e.localisation)
                 ORDER BY e.nom
                 """.formatted(table(niveau), colonneRattachement(niveau), colonneRattachement(niveau));
         return versEglises(entityManager.createNativeQuery(sql, Tuple.class).setParameter("id", id).getResultList());
@@ -176,17 +176,15 @@ public class GeographieRepository {
     }
 
     /**
-     * Enregistre la limite d'une zone à partir d'une géométrie GeoJSON.
-     * La géométrie est reprojetée en 4326 si elle déclare un autre CRS, corrigée si invalide
-     * (ST_MakeValid) et normalisée en MultiPolygon.
+     * Enregistre la carte QGIS (colonne carte_qgis) d'une zone.
      *
+     * @param geojson Polygon GeoJSON en WGS 84, déjà validé et normalisé par GeometrieMapper
      * @return nombre de lignes mises à jour (0 si la zone n'existe pas)
      */
-    public int majLimite(NiveauHierarchique niveau, Integer id, String geojson) {
+    public int majCarteQgis(NiveauHierarchique niveau, Integer id, String geojson) {
         String sql = """
                 UPDATE %s
-                SET limite = ST_Multi(ST_CollectionExtract(ST_MakeValid(
-                        ST_Transform(ST_GeomFromGeoJSON(:geojson), 4326)), 3))
+                SET carte_qgis = ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)
                 WHERE id = :id
                 """.formatted(table(niveau));
         return entityManager.createNativeQuery(sql)
