@@ -1,13 +1,18 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.dto.DistrictDTO;
+import com.anglikana.backoffice.dto.ParoisseDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.District;
 import com.anglikana.backoffice.entity.Region;
+import com.anglikana.backoffice.mapper.DistrictMapper;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
+import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -23,19 +28,22 @@ public class DistrictController {
     private final DistrictRepository districtRepository;
     private final RegionRepository regionRepository;
     private final ClergeRepository clergeRepository;
+    private final HierarchieService hierarchieService;
 
     public DistrictController(DistrictRepository districtRepository,
                                RegionRepository regionRepository,
-                               ClergeRepository clergeRepository) {
+                               ClergeRepository clergeRepository,
+                               HierarchieService hierarchieService) {
         this.districtRepository = districtRepository;
         this.regionRepository = regionRepository;
         this.clergeRepository = clergeRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
     public List<DistrictDTO> getAll() {
         return districtRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(DistrictMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -44,32 +52,47 @@ public class DistrictController {
 
         if (districtOptionnel.isPresent()) {
             District district = districtOptionnel.get();
-            return ResponseEntity.ok(toDTO(district));
+            return ResponseEntity.ok(DistrictMapper.toDTO(district));
         } else {
             return ResponseEntity.notFound().build();
         }
     }
 
+    @GetMapping("/{id}/paroisses")
+    public ResponseEntity<List<ParoisseDTO>> getParoisses(@PathVariable Integer id) {
+        return hierarchieService.getParoissesDuDistrict(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DistrictDTO> create(@RequestBody DistrictDTO dto) {
+    public ResponseEntity<?> create(@RequestBody DistrictDTO dto) {
         District district = new District();
-        appliquerDTO(district, dto);
+        try {
+            appliquerDTO(district, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         District saved = districtRepository.save(district);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(DistrictMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<DistrictDTO> update(@PathVariable Integer id, @RequestBody DistrictDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody DistrictDTO dto) {
         Optional<District> districtOptionnel = districtRepository.findById(id);
 
         if (districtOptionnel.isPresent()) {
             District district = districtOptionnel.get();
-            appliquerDTO(district, dto);
+            try {
+                appliquerDTO(district, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             District updated = districtRepository.save(district);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(DistrictMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -85,19 +108,10 @@ public class DistrictController {
         return ResponseEntity.noContent().build();
     }
 
-    private DistrictDTO toDTO(District district) {
-        DistrictDTO dto = new DistrictDTO();
-        dto.setId(district.getId());
-        dto.setNom(district.getNom());
-        dto.setCarteQgis(district.getCarteQgis());
-        dto.setRegionId(district.getRegion() != null ? district.getRegion().getId() : null);
-        dto.setResponsableId(district.getResponsable() != null ? district.getResponsable().getId() : null);
-        return dto;
-    }
-
     private void appliquerDTO(District district, DistrictDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        district.setCarteQgis(carteQgis);
         district.setNom(dto.getNom());
-        district.setCarteQgis(dto.getCarteQgis());
 
         if (dto.getRegionId() != null) {
             Optional<Region> regionOptionnel = regionRepository.findById(dto.getRegionId());

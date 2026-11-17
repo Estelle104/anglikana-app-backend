@@ -3,6 +3,7 @@ package com.anglikana.backoffice.controller;
 import com.anglikana.backoffice.dto.ClergeDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Role;
+import com.anglikana.backoffice.mapper.ClergeMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.RoleRepository;
 
@@ -30,7 +31,7 @@ public class ClergeController {
     @GetMapping
     public List<ClergeDTO> getAll() {
         return clergeRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(ClergeMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -39,7 +40,7 @@ public class ClergeController {
 
         if (clergeOptionnel.isPresent()) {
             Clerge clerge = clergeOptionnel.get();
-            return ResponseEntity.ok(toDTO(clerge));
+            return ResponseEntity.ok(ClergeMapper.toDTO(clerge));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -52,7 +53,7 @@ public class ClergeController {
         appliquerDTO(clerge, dto);
 
         Clerge saved = clergeRepository.save(clerge);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(ClergeMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
@@ -64,7 +65,7 @@ public class ClergeController {
             Clerge clerge = clergeOptionnel.get();
             appliquerDTO(clerge, dto);
             Clerge updated = clergeRepository.save(clerge);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(ClergeMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -78,19 +79,6 @@ public class ClergeController {
         }
         clergeRepository.deleteById(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private ClergeDTO toDTO(Clerge clerge) {
-        ClergeDTO dto = new ClergeDTO();
-        dto.setId(clerge.getId());
-        dto.setNom(clerge.getNom());
-        dto.setPrenom(clerge.getPrenom());
-        dto.setDateNaissance(clerge.getDateNaissance());
-        dto.setHierarchie(clerge.getHierarchie());
-        dto.setTelephone(clerge.getTelephone());
-        dto.setEmail(clerge.getEmail());
-        dto.setRoleId(clerge.getRole() != null ? clerge.getRole().getId() : null);
-        return dto;
     }
 
     private void appliquerDTO(Clerge clerge, ClergeDTO dto) {

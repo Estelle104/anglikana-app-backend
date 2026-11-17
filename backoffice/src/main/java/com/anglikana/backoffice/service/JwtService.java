@@ -1,6 +1,8 @@
 package com.anglikana.backoffice.service;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,15 +48,29 @@ public class JwtService {
     }
 
     public String extractUsername(String token) {
-        return extractClaim(token, Claims::getSubject);
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public String extractRole(String token) {
-        return extractClaim(token, claims -> claims.get("role", String.class));
+        try {
+            return extractClaim(token, claims -> claims.get("role", String.class));
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
+        try {
+            return extractClaim(token, Claims::getExpiration);
+        } catch (ExpiredJwtException e) {
+            return new Date(0);
+        } catch (JwtException | IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
@@ -71,11 +87,16 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String token, String username) {
+        if (username == null || username.isBlank()) {
+            return false;
+        }
+
         final String extractedUsername = extractUsername(token);
-        return extractedUsername.equals(username) && !isTokenExpired(token);
+        return extractedUsername != null && extractedUsername.equals(username) && !isTokenExpired(token);
     }
 
     public boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        Date expiration = extractExpiration(token);
+        return expiration == null || expiration.before(new Date());
     }
 }

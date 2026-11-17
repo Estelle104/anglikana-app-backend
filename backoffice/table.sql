@@ -33,7 +33,7 @@ CREATE TABLE clerge (
 CREATE TABLE diocese (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     presentation    TEXT,
     coordonnees     VARCHAR(100),
     responsable_id  INT,
@@ -47,6 +47,7 @@ CREATE TABLE diocese (
 CREATE TABLE region (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     diocese_id      INT NOT NULL,
     responsable_id  INT,
     CONSTRAINT fk_region_diocese
@@ -62,7 +63,7 @@ CREATE TABLE region (
 CREATE TABLE district (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     region_id       INT NOT NULL,
     responsable_id  INT,
     CONSTRAINT fk_district_region
@@ -78,7 +79,7 @@ CREATE TABLE district (
 CREATE TABLE paroisse (
     id              SERIAL PRIMARY KEY,
     nom             VARCHAR(150) NOT NULL,
-    carte_qgis      VARCHAR(255),
+    carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     district_id     INT NOT NULL,
     responsable_id  INT,
     CONSTRAINT fk_paroisse_district
@@ -199,3 +200,21 @@ CREATE TABLE photo (
 -- Index utiles pour les relations polymorphes
 CREATE INDEX idx_photo_entite ON photo (type_entite, entite_id);
 CREATE INDEX idx_contribution_entite ON contribution (type_entite, entite_id);
+
+-- =========================================================
+-- SPRINT 2 : recherche, index hiérarchiques et spatiaux
+-- (voir migrations/V2__sprint2_geographie_statistiques.sql)
+-- =========================================================
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+CREATE INDEX idx_region_diocese    ON region    (diocese_id);
+CREATE INDEX idx_district_region   ON district  (region_id);
+CREATE INDEX idx_paroisse_district ON paroisse  (district_id);
+CREATE INDEX idx_eglise_paroisse   ON eglise    (paroisse_id);
+CREATE INDEX idx_ressource_eglise  ON ressource (eglise_id);
+
+CREATE INDEX idx_diocese_carte_qgis  ON diocese  USING GIST (carte_qgis);
+CREATE INDEX idx_region_carte_qgis   ON region   USING GIST (carte_qgis);
+CREATE INDEX idx_district_carte_qgis ON district USING GIST (carte_qgis);
+CREATE INDEX idx_paroisse_carte_qgis ON paroisse USING GIST (carte_qgis);
+CREATE INDEX idx_eglise_localisation ON eglise   USING GIST (localisation);

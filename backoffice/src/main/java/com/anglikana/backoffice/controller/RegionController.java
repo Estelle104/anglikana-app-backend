@@ -1,13 +1,18 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.dto.RegionDTO;
+import com.anglikana.backoffice.dto.DistrictDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Diocese;
 import com.anglikana.backoffice.entity.Region;
+import com.anglikana.backoffice.mapper.RegionMapper;
+import com.anglikana.backoffice.mapper.GeometrieMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
+import com.anglikana.backoffice.service.HierarchieService;
 
+import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -23,17 +28,20 @@ public class RegionController {
     private final RegionRepository regionRepository;
     private final DioceseRepository dioceseRepository;
     private final ClergeRepository clergeRepository;
+    private final HierarchieService hierarchieService;
 
-    public RegionController(RegionRepository regionRepository,DioceseRepository dioceseRepository,ClergeRepository clergeRepository) {
+    public RegionController(RegionRepository regionRepository,DioceseRepository dioceseRepository,ClergeRepository clergeRepository,
+                            HierarchieService hierarchieService) {
         this.regionRepository = regionRepository;
         this.dioceseRepository = dioceseRepository;
         this.clergeRepository = clergeRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
     public List<RegionDTO> getAll() {
         return regionRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(RegionMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -42,32 +50,47 @@ public class RegionController {
 
         if (regionOptionnel.isPresent()) {
             Region region = regionOptionnel.get();
-            return ResponseEntity.ok(toDTO(region));
+            return ResponseEntity.ok(RegionMapper.toDTO(region));
         } else {
             return ResponseEntity.notFound().build();
         }
     }
 
+    @GetMapping("/{id}/districts")
+    public ResponseEntity<List<DistrictDTO>> getDistricts(@PathVariable Integer id) {
+        return hierarchieService.getDistrictsDeLaRegion(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<RegionDTO> create(@RequestBody RegionDTO dto) {
+    public ResponseEntity<?> create(@RequestBody RegionDTO dto) {
         Region region = new Region();
-        appliquerDTO(region, dto);
+        try {
+            appliquerDTO(region, dto);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
 
         Region saved = regionRepository.save(region);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(RegionMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<RegionDTO> update(@PathVariable Integer id, @RequestBody RegionDTO dto) {
+    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody RegionDTO dto) {
         Optional<Region> regionOptionnel = regionRepository.findById(id);
 
         if (regionOptionnel.isPresent()) {
             Region region = regionOptionnel.get();
-            appliquerDTO(region, dto);
+            try {
+                appliquerDTO(region, dto);
+            } catch (IllegalArgumentException e) {
+                return ResponseEntity.badRequest().body(e.getMessage());
+            }
             Region updated = regionRepository.save(region);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(RegionMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -83,16 +106,9 @@ public class RegionController {
         return ResponseEntity.noContent().build();
     }
 
-    private RegionDTO toDTO(Region region) {
-        RegionDTO dto = new RegionDTO();
-        dto.setId(region.getId());
-        dto.setNom(region.getNom());
-        dto.setDioceseId(region.getDiocese() != null ? region.getDiocese().getId() : null);
-        dto.setResponsableId(region.getResponsable() != null ? region.getResponsable().getId() : null);
-        return dto;
-    }
-
     private void appliquerDTO(Region region, RegionDTO dto) {
+        Polygon carteQgis = GeometrieMapper.depuisGeoJson(dto.getCarteQgis());
+        region.setCarteQgis(carteQgis);
         region.setNom(dto.getNom());
 
         if (dto.getDioceseId() != null) {

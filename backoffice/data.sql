@@ -19,10 +19,11 @@ INSERT INTO clerge (id, nom, prenom, date_naissance, hierarchie, telephone, emai
 
 -- =========================================================
 -- DATA : DIOCESE
+-- carte_qgis : polygone PostGIS, importé depuis QGIS (PUT /api/geographie/{niveau}/limites)
 -- =========================================================
 INSERT INTO diocese (id, nom, carte_qgis, presentation, coordonnees, responsable_id) VALUES
-(1, 'Diocèse d''Antananarivo', 'maps/diocese_tana.qgz', 'Diocèse métropolitain fondé à la fin du XIXe siècle.', '-18.8792, 47.5079', 1),
-(2, 'Diocèse de Toamasina', 'maps/diocese_toamasina.qgz', 'Diocèse couvrant la région côtière de l''Est.', '-18.1492, 49.4023', 2);
+(1, 'Diocèse d''Antananarivo', NULL, 'Diocèse métropolitain fondé à la fin du XIXe siècle.', '-18.8792, 47.5079', 1),
+(2, 'Diocèse de Toamasina', NULL, 'Diocèse couvrant la région côtière de l''Est.', '-18.1492, 49.4023', 2);
 
 -- =========================================================
 -- DATA : REGION
@@ -35,15 +36,15 @@ INSERT INTO region (id, nom, diocese_id, responsable_id) VALUES
 -- DATA : DISTRICT
 -- =========================================================
 INSERT INTO district (id, nom, carte_qgis, region_id, responsable_id) VALUES
-(1, 'District de Tana Ville', 'maps/district_tana_ville.qgz', 1, 3),
-(2, 'District de Toamasina Urbain', 'maps/district_toamasina_urbain.qgz', 2, 4);
+(1, 'District de Tana Ville', NULL, 1, 3),
+(2, 'District de Toamasina Urbain', NULL, 2, 4);
 
 -- =========================================================
 -- DATA : PAROISSE
 -- =========================================================
 INSERT INTO paroisse (id, nom, carte_qgis, district_id, responsable_id) VALUES
-(1, 'Paroisse Saint-Joseph', 'maps/paroisse_st_joseph.qgz', 1, 3),
-(2, 'Paroisse Sainte-Marie', 'maps/paroisse_st_marie.qgz', 2, 4);
+(1, 'Paroisse Saint-Joseph', NULL, 1, 3),
+(2, 'Paroisse Sainte-Marie', NULL, 2, 4);
 
 -- =========================================================
 -- DATA : EGLISE

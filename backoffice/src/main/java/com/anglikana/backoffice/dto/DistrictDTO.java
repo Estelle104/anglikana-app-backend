@@ -1,10 +1,13 @@
 package com.anglikana.backoffice.dto;
 
+import tools.jackson.databind.JsonNode;
+
 public class DistrictDTO {
 
     private Integer id;
     private String nom;
-    private String carteQgis;
+    /** Limite de la zone en géométrie GeoJSON (Polygon, WGS 84) ; null si aucune carte. */
+    private JsonNode carteQgis;
     private Integer regionId;
     private Integer responsableId;
 
@@ -14,8 +17,8 @@ public class DistrictDTO {
     public String getNom() { return nom; }
     public void setNom(String nom) { this.nom = nom; }
 
-    public String getCarteQgis() { return carteQgis; }
-    public void setCarteQgis(String carteQgis) { this.carteQgis = carteQgis; }
+    public JsonNode getCarteQgis() { return carteQgis; }
+    public void setCarteQgis(JsonNode carteQgis) { this.carteQgis = carteQgis; }
 
     public Integer getRegionId() { return regionId; }
     public void setRegionId(Integer regionId) { this.regionId = regionId; }

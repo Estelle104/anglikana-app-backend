@@ -1,12 +1,15 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.dto.EgliseDTO;
+import com.anglikana.backoffice.dto.RessourceDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Eglise;
 import com.anglikana.backoffice.entity.Paroisse;
+import com.anglikana.backoffice.mapper.EgliseMapper;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.EgliseRepository;
 import com.anglikana.backoffice.repository.ParoisseRepository;
+import com.anglikana.backoffice.service.HierarchieService;
 
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -32,19 +35,22 @@ public class EgliseController {
     private final EgliseRepository egliseRepository;
     private final ParoisseRepository paroisseRepository;
     private final ClergeRepository clergeRepository;
+    private final HierarchieService hierarchieService;
 
     public EgliseController(EgliseRepository egliseRepository,
                              ParoisseRepository paroisseRepository,
-                             ClergeRepository clergeRepository) {
+                             ClergeRepository clergeRepository,
+                             HierarchieService hierarchieService) {
         this.egliseRepository = egliseRepository;
         this.paroisseRepository = paroisseRepository;
         this.clergeRepository = clergeRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
     public List<EgliseDTO> getAll() {
         return egliseRepository.findAll()
-                .stream().map(this::toDTO).collect(Collectors.toList());
+                .stream().map(EgliseMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
@@ -53,10 +59,17 @@ public class EgliseController {
 
         if (egliseOptionnel.isPresent()) {
             Eglise eglise = egliseOptionnel.get();
-            return ResponseEntity.ok(toDTO(eglise));
+            return ResponseEntity.ok(EgliseMapper.toDTO(eglise));
         } else {
             return ResponseEntity.notFound().build();
         }
+    }
+
+    @GetMapping("/{id}/ressources")
+    public ResponseEntity<List<RessourceDTO>> getRessources(@PathVariable Integer id) {
+        return hierarchieService.getRessourcesDeLEglise(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
@@ -66,7 +79,7 @@ public class EgliseController {
         appliquerDTO(eglise, dto);
 
         Eglise saved = egliseRepository.save(eglise);
-        return ResponseEntity.status(201).body(toDTO(saved));
+        return ResponseEntity.status(201).body(EgliseMapper.toDTO(saved));
     }
 
     @PutMapping("/{id}")
@@ -78,7 +91,7 @@ public class EgliseController {
             Eglise eglise = egliseOptionnel.get();
             appliquerDTO(eglise, dto);
             Eglise updated = egliseRepository.save(eglise);
-            return ResponseEntity.ok(toDTO(updated));
+            return ResponseEntity.ok(EgliseMapper.toDTO(updated));
         } else {
             return ResponseEntity.notFound().build();
         }
@@ -92,29 +105,6 @@ public class EgliseController {
         }
         egliseRepository.deleteById(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private EgliseDTO toDTO(Eglise eglise) {
-        EgliseDTO dto = new EgliseDTO();
-        dto.setId(eglise.getId());
-        dto.setNom(eglise.getNom());
-        dto.setAdresse(eglise.getAdresse());
-        dto.setHistorique(eglise.getHistorique());
-        dto.setLienFacebook(eglise.getLienFacebook());
-        dto.setParoisseId(eglise.getParoisse() != null ? eglise.getParoisse().getId() : null);
-        dto.setResponsableId(eglise.getResponsable() != null ? eglise.getResponsable().getId() : null);
-
-        Point point = eglise.getLocalisation();
-        if (point != null) {
-            // En JTS : getX() = longitude, getY() = latitude (ordre inversé par rapport à l'intuition)
-            dto.setLongitude(point.getX());
-            dto.setLatitude(point.getY());
-        } else {
-            dto.setLongitude(null);
-            dto.setLatitude(null);
-        }
-
-        return dto;
     }
 
     private void appliquerDTO(Eglise eglise, EgliseDTO dto) {
