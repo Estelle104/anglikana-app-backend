@@ -1,0 +1,58 @@
+services:
+  eem-database:
+    # PostgreSQL 16 + PostGIS 3.5 : types GEOMETRY(Polygon/Point, 4326) des limites et localisations
+    # (hdoc/app/stack-technique.md §3). Le patch 16.x suit l'image.
+    image: postgis/postgis:16-3.5-alpine
+    container_name: eem-database
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # 5434 côté hôte : 5432 est pris par le PostgreSQL local, 5433 par la stack CNTEMAD.
+    ports:
+      - "5434:5432"
+    volumes:
+      - eem-postgres-data:/var/lib/postgresql/data
+      # Scripts exécutés par ordre alphabétique, uniquement à la création du volume :
+      # 0xx init/tables, 3xx index, 4xx données. Réinitialiser : docker compose down -v
+      - ./database:/docker-entrypoint-initdb.d
+    networks:
+      - eem-network
+    # -h localhost : le serveur temporaire de l'initialisation (scripts database/) n'écoute que sur le
+    # socket local ; tester en TCP n'annonce la base prête qu'une fois l'initialisation terminée.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 1m
+
+  eem-backend:
+    build: ./backoffice
+    container_name: eem-backend
+    ports:
+      - "8084:8084"
+    # Ces variables écrasent spring.datasource.* et jwt.secret de application.properties
+    # (relaxed binding de Spring Boot) : le lancement hors Docker garde ses valeurs locales.
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://eem-database:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      eem-database:
+        condition: service_healthy
+    volumes:
+      # Code de l'hôte monté : recompilation par spring-boot:run et rechargement par DevTools
+      - ./backoffice:/app
+      # Cache Maven partagé avec l'hôte : pas de retéléchargement des dépendances à chaque build
+      - ~/.m2:/root/.m2
+    networks:
+      - eem-network
+
+volumes:
+  eem-postgres-data:
+
+networks:
+  eem-network:
+    driver: bridge
