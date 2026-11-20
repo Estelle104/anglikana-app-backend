@@ -1,5 +1,6 @@
 package com.anglikana.backoffice.controller;
 
+import com.anglikana.backoffice.config.OpenApiConfig;
 import com.anglikana.backoffice.dto.ParoisseDTO;
 import com.anglikana.backoffice.dto.EgliseDTO;
 import com.anglikana.backoffice.entity.Clerge;
@@ -12,6 +13,13 @@ import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.ParoisseRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +31,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/paroisses")
+@Tag(name = "Paroisses", description = "CRUD des paroisses (niveau 4 de la hiérarchie, rattachées à un district) et églises d'une paroisse")
 public class ParoisseController {
 
     private final ParoisseRepository paroisseRepository;
@@ -41,13 +50,18 @@ public class ParoisseController {
     }
 
     @GetMapping
+    @Operation(summary = "Lister les paroisses", description = "Toutes les paroisses, sans pagination. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Liste des paroisses")
     public List<ParoisseDTO> getAll() {
         return paroisseRepository.findAll()
                 .stream().map(ParoisseMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ParoisseDTO> getById(@PathVariable Integer id) {
+    @Operation(summary = "Consulter une paroisse", description = "Lecture publique. La carte QGIS est renvoyée en GeoJSON Polygon (null si absente).")
+    @ApiResponse(responseCode = "200", description = "Paroisse trouvée")
+    @ApiResponse(responseCode = "404", description = "Paroisse introuvable", content = @Content)
+    public ResponseEntity<ParoisseDTO> getById(@Parameter(description = "Identifiant de la paroisse") @PathVariable Integer id) {
         Optional<Paroisse> paroisseOptionnel = paroisseRepository.findById(id);
 
         if (paroisseOptionnel.isPresent()) {
@@ -59,7 +73,10 @@ public class ParoisseController {
     }
 
     @GetMapping("/{id}/eglises")
-    public ResponseEntity<List<EgliseDTO>> getEglises(@PathVariable Integer id) {
+    @Operation(summary = "Lister les églises d'une paroisse", description = "Églises rattachées à la paroisse, triées par nom. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Églises de la paroisse (liste vide si aucune)")
+    @ApiResponse(responseCode = "404", description = "Paroisse introuvable", content = @Content)
+    public ResponseEntity<List<EgliseDTO>> getEglises(@Parameter(description = "Identifiant de la paroisse") @PathVariable Integer id) {
         return hierarchieService.getEglisesDeLaParoisse(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -67,6 +84,14 @@ public class ParoisseController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Créer une paroisse",
+            description = "Réservé au rôle ADMIN. districtId est obligatoire ; carteQgis, si fournie, doit être un GeoJSON Polygon d'un seul tenant en WGS 84.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "201", description = "Paroisse créée",
+            content = @Content(schema = @Schema(implementation = ParoisseDTO.class)))
+    @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
     public ResponseEntity<?> create(@RequestBody ParoisseDTO dto) {
         Paroisse paroisse = new Paroisse();
         try {
@@ -81,7 +106,16 @@ public class ParoisseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody ParoisseDTO dto) {
+    @Operation(summary = "Modifier une paroisse",
+            description = "Réservé au rôle ADMIN. Remplace tous les champs, y compris la carte QGIS (null pour la supprimer).")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "200", description = "Paroisse modifiée",
+            content = @Content(schema = @Schema(implementation = ParoisseDTO.class)))
+    @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Paroisse introuvable", content = @Content)
+    public ResponseEntity<?> update(@Parameter(description = "Identifiant de la paroisse") @PathVariable Integer id, @RequestBody ParoisseDTO dto) {
         Optional<Paroisse> paroisseOptionnel = paroisseRepository.findById(id);
 
         if (paroisseOptionnel.isPresent()) {
@@ -100,7 +134,13 @@ public class ParoisseController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> delete(@PathVariable Integer id) {
+    @Operation(summary = "Supprimer une paroisse",
+            description = "Réservé au rôle ADMIN. La base supprime en cascade ses églises et leurs ressources.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "204", description = "Paroisse supprimée", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Paroisse introuvable", content = @Content)
+    public ResponseEntity<?> delete(@Parameter(description = "Identifiant de la paroisse") @PathVariable Integer id) {
         if (!paroisseRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }

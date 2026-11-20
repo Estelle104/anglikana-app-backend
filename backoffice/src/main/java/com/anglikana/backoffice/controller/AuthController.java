@@ -9,6 +9,11 @@ import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.UtilisateurRepository;
 import com.anglikana.backoffice.service.JwtService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -24,6 +29,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = {"http://localhost:4200", "http://127.0.0.1:4200", "http://localhost:8084", "http://127.0.0.1:8084"}, allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
+@Tag(name = "Authentification", description = "Connexion par JWT, création de compte et déconnexion (routes publiques)")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -45,6 +51,14 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    @Operation(summary = "Se connecter",
+            description = "Vérifie le nom d'utilisateur et le mot de passe, puis renvoie un jeton JWT (validité : jwt.expiration, 24 h par défaut). "
+                    + "Le rôle renvoyé est celui du clergé lié au compte, sans préfixe ROLE_. "
+                    + "Envoyer ensuite le jeton dans l'en-tête Authorization: Bearer <jeton> (bouton « Authorize »).")
+    @ApiResponse(responseCode = "200", description = "Connexion réussie",
+            content = @Content(schema = @Schema(implementation = LoginResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Nom d'utilisateur ou mot de passe incorrect",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
             Authentication authentication = authenticationManager.authenticate(
@@ -66,6 +80,15 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @Operation(summary = "Créer un compte",
+            description = "Crée un compte actif rattaché à un membre du clergé (clergeId) ; le mot de passe est enregistré en BCrypt. "
+                    + "Le compte reçoit les droits du rôle de ce clergé. Route actuellement publique.")
+    @ApiResponse(responseCode = "201", description = "Compte créé (message de confirmation)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "400", description = "Clergé introuvable pour l'id fourni",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "409", description = "Ce nom d'utilisateur existe déjà",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
 
         if (utilisateurRepository.existsByNomUtilisateur(request.getNomUtilisateur())) {
@@ -91,6 +114,10 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @Operation(summary = "Se déconnecter",
+            description = "Sans effet côté serveur (JWT sans état) : le client doit supprimer son jeton.")
+    @ApiResponse(responseCode = "200", description = "Message de confirmation",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> logout() {
         return ResponseEntity.ok("Déconnexion réussie. Supprimez le token côté client.");
     }

@@ -1,5 +1,6 @@
 package com.anglikana.backoffice.controller;
 
+import com.anglikana.backoffice.config.OpenApiConfig;
 import com.anglikana.backoffice.dto.EgliseDTO;
 import com.anglikana.backoffice.dto.RessourceDTO;
 import com.anglikana.backoffice.entity.Clerge;
@@ -11,6 +12,12 @@ import com.anglikana.backoffice.repository.EgliseRepository;
 import com.anglikana.backoffice.repository.ParoisseRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.Point;
@@ -26,6 +33,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/eglises")
+@Tag(name = "Églises", description = "CRUD des églises (niveau 5 de la hiérarchie, rattachées à une paroisse, localisées par latitude/longitude) et ressources d'une église")
 public class EgliseController {
 
     // SRID 4326 = système de coordonnées GPS standard (WGS 84), cohérent avec ton schéma SQL
@@ -48,13 +56,18 @@ public class EgliseController {
     }
 
     @GetMapping
+    @Operation(summary = "Lister les églises", description = "Toutes les églises, sans pagination. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Liste des églises")
     public List<EgliseDTO> getAll() {
         return egliseRepository.findAll()
                 .stream().map(EgliseMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<EgliseDTO> getById(@PathVariable Integer id) {
+    @Operation(summary = "Consulter une église", description = "Lecture publique. latitude/longitude sont null si l'église n'est pas localisée.")
+    @ApiResponse(responseCode = "200", description = "Église trouvée")
+    @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    public ResponseEntity<EgliseDTO> getById(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
         Optional<Eglise> egliseOptionnel = egliseRepository.findById(id);
 
         if (egliseOptionnel.isPresent()) {
@@ -66,7 +79,10 @@ public class EgliseController {
     }
 
     @GetMapping("/{id}/ressources")
-    public ResponseEntity<List<RessourceDTO>> getRessources(@PathVariable Integer id) {
+    @Operation(summary = "Lister les ressources d'une église", description = "Ressources rattachées à l'église, triées par nom. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Ressources de l'église (liste vide si aucune)")
+    @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    public ResponseEntity<List<RessourceDTO>> getRessources(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
         return hierarchieService.getRessourcesDeLEglise(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -74,6 +90,11 @@ public class EgliseController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Créer une église",
+            description = "Réservé au rôle ADMIN. paroisseId est obligatoire ; la localisation n'est enregistrée que si latitude et longitude sont toutes deux fournies (WGS 84).")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "201", description = "Église créée")
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
     public ResponseEntity<EgliseDTO> create(@RequestBody EgliseDTO dto) {
         Eglise eglise = new Eglise();
         appliquerDTO(eglise, dto);
@@ -84,7 +105,13 @@ public class EgliseController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<EgliseDTO> update(@PathVariable Integer id, @RequestBody EgliseDTO dto) {
+    @Operation(summary = "Modifier une église",
+            description = "Réservé au rôle ADMIN. Remplace tous les champs ; sans latitude ou sans longitude, la localisation est effacée.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "200", description = "Église modifiée")
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    public ResponseEntity<EgliseDTO> update(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id, @RequestBody EgliseDTO dto) {
         Optional<Eglise> egliseOptionnel = egliseRepository.findById(id);
 
         if (egliseOptionnel.isPresent()) {
@@ -99,7 +126,13 @@ public class EgliseController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> delete(@PathVariable Integer id) {
+    @Operation(summary = "Supprimer une église",
+            description = "Réservé au rôle ADMIN. La base supprime en cascade ses ressources et ses horaires de culte.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "204", description = "Église supprimée", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    public ResponseEntity<?> delete(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
         if (!egliseRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }

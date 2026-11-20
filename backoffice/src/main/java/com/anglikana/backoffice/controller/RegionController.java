@@ -1,5 +1,6 @@
 package com.anglikana.backoffice.controller;
 
+import com.anglikana.backoffice.config.OpenApiConfig;
 import com.anglikana.backoffice.dto.RegionDTO;
 import com.anglikana.backoffice.dto.DistrictDTO;
 import com.anglikana.backoffice.entity.Clerge;
@@ -12,6 +13,13 @@ import com.anglikana.backoffice.repository.DioceseRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
 import com.anglikana.backoffice.service.HierarchieService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,6 +31,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/regions")
+@Tag(name = "Régions", description = "CRUD des régions (niveau 2 de la hiérarchie, rattachées à un diocèse) et districts d'une région")
 public class RegionController {
 
     private final RegionRepository regionRepository;
@@ -39,13 +48,18 @@ public class RegionController {
     }
 
     @GetMapping
+    @Operation(summary = "Lister les régions", description = "Toutes les régions, sans pagination. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Liste des régions")
     public List<RegionDTO> getAll() {
         return regionRepository.findAll()
                 .stream().map(RegionMapper::toDTO).collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RegionDTO> getById(@PathVariable Integer id) {
+    @Operation(summary = "Consulter une région", description = "Lecture publique. La carte QGIS est renvoyée en GeoJSON Polygon (null si absente).")
+    @ApiResponse(responseCode = "200", description = "Région trouvée")
+    @ApiResponse(responseCode = "404", description = "Région introuvable", content = @Content)
+    public ResponseEntity<RegionDTO> getById(@Parameter(description = "Identifiant de la région") @PathVariable Integer id) {
         Optional<Region> regionOptionnel = regionRepository.findById(id);
 
         if (regionOptionnel.isPresent()) {
@@ -57,7 +71,10 @@ public class RegionController {
     }
 
     @GetMapping("/{id}/districts")
-    public ResponseEntity<List<DistrictDTO>> getDistricts(@PathVariable Integer id) {
+    @Operation(summary = "Lister les districts d'une région", description = "Districts rattachés à la région, triés par nom. Lecture publique.")
+    @ApiResponse(responseCode = "200", description = "Districts de la région (liste vide si aucun)")
+    @ApiResponse(responseCode = "404", description = "Région introuvable", content = @Content)
+    public ResponseEntity<List<DistrictDTO>> getDistricts(@Parameter(description = "Identifiant de la région") @PathVariable Integer id) {
         return hierarchieService.getDistrictsDeLaRegion(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -65,6 +82,14 @@ public class RegionController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Créer une région",
+            description = "Réservé au rôle ADMIN. dioceseId est obligatoire ; carteQgis, si fournie, doit être un GeoJSON Polygon d'un seul tenant en WGS 84.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "201", description = "Région créée",
+            content = @Content(schema = @Schema(implementation = RegionDTO.class)))
+    @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
     public ResponseEntity<?> create(@RequestBody RegionDTO dto) {
         Region region = new Region();
         try {
@@ -79,7 +104,16 @@ public class RegionController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody RegionDTO dto) {
+    @Operation(summary = "Modifier une région",
+            description = "Réservé au rôle ADMIN. Remplace tous les champs, y compris la carte QGIS (null pour la supprimer).")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "200", description = "Région modifiée",
+            content = @Content(schema = @Schema(implementation = RegionDTO.class)))
+    @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Région introuvable", content = @Content)
+    public ResponseEntity<?> update(@Parameter(description = "Identifiant de la région") @PathVariable Integer id, @RequestBody RegionDTO dto) {
         Optional<Region> regionOptionnel = regionRepository.findById(id);
 
         if (regionOptionnel.isPresent()) {
@@ -98,7 +132,13 @@ public class RegionController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<?> delete(@PathVariable Integer id) {
+    @Operation(summary = "Supprimer une région",
+            description = "Réservé au rôle ADMIN. La base supprime en cascade ses districts, paroisses, églises et ressources.")
+    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
+    @ApiResponse(responseCode = "204", description = "Région supprimée", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Région introuvable", content = @Content)
+    public ResponseEntity<?> delete(@Parameter(description = "Identifiant de la région") @PathVariable Integer id) {
         if (!regionRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }

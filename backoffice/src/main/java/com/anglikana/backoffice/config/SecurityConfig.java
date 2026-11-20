@@ -66,6 +66,8 @@ public class SecurityConfig {
                     .requestMatchers("/api/auth/**").permitAll()
                     .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
+                    // Swagger UI et spec OpenAPI : hors de /api, donc non couverts par la règle précédente
+                    .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                     .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())
