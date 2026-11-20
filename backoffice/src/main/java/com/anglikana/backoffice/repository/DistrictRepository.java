@@ -10,4 +10,8 @@ import java.util.List;
 public interface DistrictRepository extends JpaRepository<District, Integer> {
     List<District> findByRegionIdOrderByNomAsc(Integer regionId);
     List<District> findByRegionDioceseIdOrderByNomAsc(Integer dioceseId);
+
+    boolean existsByRegionId(Integer regionId);
+
+    boolean existsByResponsableId(Integer responsableId);
 }

@@ -1,5 +1,6 @@
 package com.anglikana.backoffice.sprint2;
 
+import com.anglikana.backoffice.config.MethodSecurityConfig;
 import com.anglikana.backoffice.config.SecurityConfig;
 import com.anglikana.backoffice.controller.DioceseController;
 import com.anglikana.backoffice.controller.DistrictController;
@@ -8,6 +9,7 @@ import com.anglikana.backoffice.repository.DistrictRepository;
 import com.anglikana.backoffice.repository.RegionRepository;
 import com.anglikana.backoffice.controller.GeographieController;
 import com.anglikana.backoffice.controller.TableauBordController;
+import com.anglikana.backoffice.dto.ApercuHierarchieDTO;
 import com.anglikana.backoffice.dto.ImportLimitesResultatDTO;
 import com.anglikana.backoffice.dto.NiveauHierarchique;
 import com.anglikana.backoffice.dto.NoeudHierarchiqueDTO;
@@ -20,6 +22,10 @@ import com.anglikana.backoffice.dto.ZoneFeatureCollectionDTO;
 import com.anglikana.backoffice.dto.ZoneFeatureDTO;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
+import com.anglikana.backoffice.repository.PerimetreRepository;
+import com.anglikana.backoffice.security.AutorisationService;
+import com.anglikana.backoffice.security.EntiteProtegee;
+import com.anglikana.backoffice.security.WithUtilisateurConnecte;
 import com.anglikana.backoffice.service.CustomUserDetailsService;
 import com.anglikana.backoffice.service.GeographieService;
 import com.anglikana.backoffice.service.HierarchieService;
@@ -31,7 +37,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -53,7 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = {TableauBordController.class, GeographieController.class, DioceseController.class,
         DistrictController.class})
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, MethodSecurityConfig.class, AutorisationService.class})
 class Sprint2ControllerTest {
 
     private static final String COLLECTION_VIDE = "{\"type\":\"FeatureCollection\",\"features\":[]}";
@@ -69,6 +74,12 @@ class Sprint2ControllerTest {
     @MockitoBean private ClergeRepository clergeRepository;
     @MockitoBean private JwtService jwtService;
     @MockitoBean private CustomUserDetailsService userDetailsService;
+    @MockitoBean private PerimetreRepository perimetreRepository;
+
+    /** Le compte de test (clergé 1) est responsable de l'entité, ou d'un de ses ancêtres. */
+    private void responsableDe(EntiteProtegee entite, int id) {
+        when(perimetreRepository.chaineResponsables(entite, id)).thenReturn(Optional.of(List.of(1)));
+    }
 
     // ------------------------------------------------------------------ Consultation hiérarchique
 
@@ -96,8 +107,9 @@ class Sprint2ControllerTest {
     // ------------------------------------------------------------------ Carte QGIS (CRUD)
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithUtilisateurConnecte(clergeId = 1, niveau = 3)
     void carteQgisEnregistreeEtRenvoyeeEnGeoJson() throws Exception {
+        responsableDe(EntiteProtegee.DISTRICT, 1);
         when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
         when(districtRepository.save(any(District.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -111,18 +123,21 @@ class Sprint2ControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithUtilisateurConnecte(clergeId = 1, niveau = 4)
     void carteQgisSansCarte() throws Exception {
+        responsableDe(EntiteProtegee.REGION, 2);
         when(districtRepository.save(any(District.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        mockMvc.perform(post("/api/districts").contentType(MediaType.APPLICATION_JSON).content("{\"nom\": \"Tana\", \"carteQgis\": null}"))
+        mockMvc.perform(post("/api/districts").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nom\": \"Tana\", \"regionId\": 2, \"carteQgis\": null}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.carteQgis").isEmpty());
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithUtilisateurConnecte(clergeId = 1, niveau = 3)
     void carteQgisInvalideRefusee() throws Exception {
+        responsableDe(EntiteProtegee.DISTRICT, 1);
         when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
 
         mockMvc.perform(put("/api/districts/1").contentType(MediaType.APPLICATION_JSON)
@@ -133,8 +148,9 @@ class Sprint2ControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithUtilisateurConnecte(clergeId = 1, niveau = 3)
     void carteQgisEnPlusieursPartiesRefusee() throws Exception {
+        responsableDe(EntiteProtegee.DISTRICT, 1);
         when(districtRepository.findById(1)).thenReturn(Optional.of(District.builder().id(1).nom("Tana").build()));
 
         mockMvc.perform(put("/api/districts/1").contentType(MediaType.APPLICATION_JSON).content("""
@@ -149,7 +165,9 @@ class Sprint2ControllerTest {
     // ------------------------------------------------------------------ Tableau de bord
 
     @Test
-    void tableauBordPublicEnLectureAvecNiveauxEnCode() throws Exception {
+    @WithUtilisateurConnecte
+    void tableauBordAvecNiveauxEnCode() throws Exception {
+        responsableDe(EntiteProtegee.DIOCESE, 1);
         NoeudHierarchiqueDTO entite = new NoeudHierarchiqueDTO();
         entite.setNiveau(NiveauHierarchique.DIOCESE);
         entite.setId(1);
@@ -176,7 +194,9 @@ class Sprint2ControllerTest {
     }
 
     @Test
+    @WithUtilisateurConnecte
     void tableauBordSansNiveauEnfants() throws Exception {
+        responsableDe(EntiteProtegee.REGION, 2);
         when(tableauBordService.getTableauBord(eq(NiveauHierarchique.REGION), eq(2), isNull()))
                 .thenReturn(Optional.of(new TableauBordDTO()));
 
@@ -184,28 +204,78 @@ class Sprint2ControllerTest {
     }
 
     @Test
-    void tableauBordNiveauInconnu() throws Exception {
-        mockMvc.perform(get("/api/tableau-bord/eveche/1"))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().string("Niveau hiérarchique inconnu : eveche"));
+    void tableauBordRefuseSansAuthentification() throws Exception {
+        mockMvc.perform(get("/api/tableau-bord/diocese/1")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/tableau-bord")).andExpect(status().isForbidden());
         verify(tableauBordService, never()).getTableauBord(any(), any(), any());
     }
 
     @Test
+    @WithUtilisateurConnecte
+    void tableauBordHorsPerimetreRefuse() throws Exception {
+        when(perimetreRepository.chaineResponsables(EntiteProtegee.DISTRICT, 2)).thenReturn(Optional.of(List.of(4, 2, 2)));
+
+        mockMvc.perform(get("/api/tableau-bord/district/2")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/tableau-bord/district/2/statistiques")).andExpect(status().isForbidden());
+        verify(tableauBordService, never()).getTableauBord(any(), any(), any());
+    }
+
+    @Test
+    @WithUtilisateurConnecte
+    void tableauBordNiveauInconnuRefuse() throws Exception {
+        mockMvc.perform(get("/api/tableau-bord/eveche/1")).andExpect(status().isForbidden());
+        verify(tableauBordService, never()).getTableauBord(any(), any(), any());
+    }
+
+    @Test
+    @WithUtilisateurConnecte
+    void tableauBordRessourceNonGeree() throws Exception {
+        responsableDe(EntiteProtegee.RESSOURCE, 1);
+
+        mockMvc.perform(get("/api/tableau-bord/ressource/1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string("Niveau hiérarchique inconnu : ressource"));
+    }
+
+    @Test
+    @WithUtilisateurConnecte
     void tableauBordNiveauEnfantsInconnu() throws Exception {
+        responsableDe(EntiteProtegee.DIOCESE, 1);
         mockMvc.perform(get("/api/tableau-bord/diocese/1").param("niveauEnfants", "x"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
+    @WithUtilisateurConnecte
     void tableauBordEntiteInexistante() throws Exception {
-        when(tableauBordService.getTableauBord(NiveauHierarchique.PAROISSE, 404, null)).thenReturn(Optional.empty());
+        when(perimetreRepository.chaineResponsables(EntiteProtegee.PAROISSE, 404)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/tableau-bord/paroisse/404")).andExpect(status().isNotFound());
+        verify(tableauBordService, never()).getTableauBord(any(), any(), any());
     }
 
     @Test
+    @WithUtilisateurConnecte
+    void apercuLimiteAuxDiocesesDuResponsable() throws Exception {
+        when(perimetreRepository.racines(1)).thenReturn(List.of(
+                new ReferenceEntiteDTO(NiveauHierarchique.DIOCESE, 1, "Diocèse"),
+                new ReferenceEntiteDTO(NiveauHierarchique.DISTRICT, 7, "District d'un autre diocèse")));
+        when(tableauBordService.getApercu(List.of(1))).thenReturn(new ApercuHierarchieDTO());
+
+        mockMvc.perform(get("/api/tableau-bord")).andExpect(status().isOk());
+        verify(tableauBordService).getApercu(List.of(1));
+    }
+
+    @Test
+    @WithUtilisateurConnecte(niveau = 4)
+    void apercuRefuseSousLeNiveauCinq() throws Exception {
+        mockMvc.perform(get("/api/tableau-bord")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithUtilisateurConnecte
     void statistiquesDUneEntite() throws Exception {
+        responsableDe(EntiteProtegee.DISTRICT, 5);
         StatistiquesEntiteDTO statistiques = new StatistiquesEntiteDTO();
         statistiques.setClerges(4);
         when(tableauBordService.getStatistiques(NiveauHierarchique.DISTRICT, 5)).thenReturn(Optional.of(statistiques));
@@ -273,16 +343,16 @@ class Sprint2ControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "USER")
-    void importDesLimitesRefusePourUnNonAdministrateur() throws Exception {
+    @WithUtilisateurConnecte(niveau = 4)
+    void importDesLimitesRefuseSousLeNiveauCinq() throws Exception {
         mockMvc.perform(put("/api/geographie/district/limites").contentType(MediaType.APPLICATION_JSON).content(COLLECTION_VIDE))
                 .andExpect(status().isForbidden());
         verify(geographieService, never()).importerLimites(any(), any());
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
-    void importDesLimitesParUnAdministrateur() throws Exception {
+    @WithUtilisateurConnecte(niveau = 5)
+    void importDesLimitesParUnEveque() throws Exception {
         ImportLimitesResultatDTO resultat = new ImportLimitesResultatDTO();
         resultat.setNiveau(NiveauHierarchique.DISTRICT);
         resultat.setZonesMisesAJour(3);
@@ -294,7 +364,7 @@ class Sprint2ControllerTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithUtilisateurConnecte(niveau = 5)
     void importDesLimitesDocumentInvalide() throws Exception {
         when(geographieService.importerLimites(eq(NiveauHierarchique.DISTRICT), any()))
                 .thenThrow(new IllegalArgumentException("Le document doit être une FeatureCollection GeoJSON"));

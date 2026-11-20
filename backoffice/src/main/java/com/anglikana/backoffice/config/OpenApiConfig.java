@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Description générale de l'API exposée par springdoc (Swagger UI : /swagger-ui.html, spec : /v3/api-docs).
  *
- * <p>Aucune exigence de sécurité globale : les lectures GET sont publiques. Les méthodes protégées
+ * <p>Aucune exigence de sécurité globale : la plupart des lectures GET sont publiques. Les méthodes protégées
  * déclarent elles-mêmes {@code @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)},
  * ce qui affiche le cadenas uniquement là où un jeton est nécessaire.</p>
  */
@@ -27,8 +27,10 @@ public class OpenApiConfig {
                         .title("API Back-office A.C.A")
                         .description("Endpoints REST du back-office de l'Anglican Church Application : hiérarchie "
                                 + "ecclésiastique, clergé, ressources, géographie et tableau de bord. "
-                                + "Les lectures sont publiques ; les écritures exigent un jeton JWT d'un compte ADMIN "
-                                + "(obtenu par POST /api/auth/login, à saisir dans « Authorize »).")
+                                + "Les lectures sont publiques, sauf le tableau de bord et /api/moi. Les écritures exigent un jeton JWT "
+                                + "(obtenu par POST /api/auth/login, à saisir dans « Authorize ») d'un responsable : il gère l'entité dont "
+                                + "son clergé est responsable et toute sa descendance. Les opérations hors hiérarchie (diocèse, clergé, "
+                                + "comptes, import QGIS) exigent le niveau 5 (Évêque). Les suppressions sont logiques (etat = -1).")
                         .version("v1"))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SECURITY_SCHEME, new SecurityScheme()

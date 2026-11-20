@@ -52,7 +52,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            if (jwtService.isTokenValid(token, userDetails.getUsername())) {
+            // Un compte désactivé (actif = false, ou clergé supprimé : etat = -1) n'obtient aucun droit.
+            if (userDetails.isEnabled() && jwtService.isTokenValid(token, userDetails.getUsername())) {
 
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(

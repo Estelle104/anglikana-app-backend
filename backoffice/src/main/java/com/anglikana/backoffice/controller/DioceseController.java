@@ -1,6 +1,10 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.config.OpenApiConfig;
+import com.anglikana.backoffice.dto.NiveauHierarchique;
+import com.anglikana.backoffice.security.EntiteProtegee;
+import com.anglikana.backoffice.security.LevelRequired;
+import com.anglikana.backoffice.security.NeedAuthorisation;
 import com.anglikana.backoffice.dto.DioceseDTO;
 import com.anglikana.backoffice.dto.DistrictDTO;
 import com.anglikana.backoffice.dto.RegionDTO;
@@ -20,7 +24,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.locationtech.jts.geom.Polygon;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,7 +48,7 @@ public class DioceseController {
     }
 
     @GetMapping
-    @Operation(summary = "Lister les diocèses", description = "Tous les diocèses, sans pagination. Lecture publique.")
+    @Operation(summary = "Lister les diocèses", description = "Tous les diocèses, sans pagination. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Liste des diocèses")
     public List<DioceseDTO> getAll() {
         return dioceseRepository.findAll()
@@ -53,7 +56,7 @@ public class DioceseController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consulter un diocèse", description = "Lecture publique. La carte QGIS est renvoyée en GeoJSON Polygon (null si absente).")
+    @Operation(summary = "Consulter un diocèse", description = "Lecture publique, éléments supprimés (etat = -1) exclus. La carte QGIS est renvoyée en GeoJSON Polygon (null si absente).")
     @ApiResponse(responseCode = "200", description = "Diocèse trouvé")
     @ApiResponse(responseCode = "404", description = "Diocèse introuvable", content = @Content)
     public ResponseEntity<DioceseDTO> getById(@Parameter(description = "Identifiant du diocèse") @PathVariable Integer id) {
@@ -68,7 +71,7 @@ public class DioceseController {
     }
 
     @GetMapping("/{id}/regions")
-    @Operation(summary = "Lister les régions d'un diocèse", description = "Régions rattachées au diocèse, triées par nom. Lecture publique.")
+    @Operation(summary = "Lister les régions d'un diocèse", description = "Régions rattachées au diocèse, triées par nom. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Régions du diocèse (liste vide si aucune)")
     @ApiResponse(responseCode = "404", description = "Diocèse introuvable", content = @Content)
     public ResponseEntity<List<RegionDTO>> getRegions(@Parameter(description = "Identifiant du diocèse") @PathVariable Integer id) {
@@ -79,7 +82,7 @@ public class DioceseController {
 
     @GetMapping("/{id}/districts")
     @Operation(summary = "Lister les districts d'un diocèse",
-            description = "Districts de toutes les régions du diocèse, triés par nom. Lecture publique.")
+            description = "Districts de toutes les régions du diocèse, triés par nom. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Districts du diocèse (liste vide si aucun)")
     @ApiResponse(responseCode = "404", description = "Diocèse introuvable", content = @Content)
     public ResponseEntity<List<DistrictDTO>> getDistricts(@Parameter(description = "Identifiant du diocèse") @PathVariable Integer id) {
@@ -89,15 +92,15 @@ public class DioceseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @LevelRequired(5)
     @Operation(summary = "Créer un diocèse",
-            description = "Réservé au rôle ADMIN. carteQgis, si fournie, doit être un GeoJSON Polygon d'un seul tenant en WGS 84.")
+            description = "Réservé au niveau 5 (Évêque). carteQgis, si fournie, doit être un GeoJSON Polygon d'un seul tenant en WGS 84.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "201", description = "Diocèse créé",
             content = @Content(schema = @Schema(implementation = DioceseDTO.class)))
     @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou niveau 5 requis", content = @Content)
     public ResponseEntity<?> create(@RequestBody DioceseDTO dto) {
         Diocese diocese = new Diocese();
         try {
@@ -111,15 +114,15 @@ public class DioceseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.DIOCESE, id = "#id")
     @Operation(summary = "Modifier un diocèse",
-            description = "Réservé au rôle ADMIN. Remplace tous les champs, y compris la carte QGIS (null pour la supprimer).")
+            description = "Réservé au responsable du diocèse. Remplace tous les champs, y compris la carte QGIS (null pour la supprimer).")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "200", description = "Diocèse modifié",
             content = @Content(schema = @Schema(implementation = DioceseDTO.class)))
     @ApiResponse(responseCode = "400", description = "Carte QGIS invalide (message explicatif)",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou hors du périmètre du diocèse", content = @Content)
     @ApiResponse(responseCode = "404", description = "Diocèse introuvable", content = @Content)
     public ResponseEntity<?> update(@Parameter(description = "Identifiant du diocèse") @PathVariable Integer id, @RequestBody DioceseDTO dto) {
         Optional<Diocese> dioceseOptionnel = dioceseRepository.findById(id);
@@ -140,16 +143,22 @@ public class DioceseController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.DIOCESE, id = "#id")
     @Operation(summary = "Supprimer un diocèse",
-            description = "Réservé au rôle ADMIN. La base supprime en cascade toute sa descendance (régions → ressources).")
+            description = "Réservé au responsable du diocèse. Suppression logique (etat = -1), refusée tant qu'une région active y est rattachée.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "204", description = "Diocèse supprimé", content = @Content)
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou hors du périmètre du diocèse", content = @Content)
     @ApiResponse(responseCode = "404", description = "Diocèse introuvable", content = @Content)
+    @ApiResponse(responseCode = "409", description = "Au moins une fille directe est encore active (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> delete(@Parameter(description = "Identifiant du diocèse") @PathVariable Integer id) {
         if (!dioceseRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
+        }
+        Optional<String> refus = hierarchieService.refusSuppression(NiveauHierarchique.DIOCESE, id);
+        if (refus.isPresent()) {
+            return ResponseEntity.status(409).body(refus.get());
         }
         dioceseRepository.deleteById(id);
         return ResponseEntity.noContent().build();

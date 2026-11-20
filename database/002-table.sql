@@ -1,11 +1,14 @@
 -- =========================================================
 -- TABLE : ROLE
 -- =========================================================
+-- niveau : 5 = Évêque (diocèse) ... 1 = Katekista (église). Il porte les droits applicatifs.
 CREATE TABLE role (
     id          SERIAL PRIMARY KEY,
     nom         VARCHAR(100) NOT NULL,
-    niveau      INT,
-    description TEXT
+    niveau      INT NOT NULL,
+    description TEXT,
+    CONSTRAINT uk_role_niveau UNIQUE (niveau),
+    CONSTRAINT ck_role_niveau CHECK (niveau BETWEEN 1 AND 5)
 );
 
 -- =========================================================
@@ -20,8 +23,10 @@ CREATE TABLE clerge (
     telephone      VARCHAR(30),
     email          VARCHAR(150),
     role_id        INT,
+    etat           SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_clerge_role
-        FOREIGN KEY (role_id) REFERENCES role(id)
+        FOREIGN KEY (role_id) REFERENCES role(id),
+    CONSTRAINT ck_clerge_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -34,8 +39,10 @@ CREATE TABLE diocese (
     presentation    TEXT,
     coordonnees     VARCHAR(100),
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_diocese_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_diocese_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -47,11 +54,13 @@ CREATE TABLE region (
     carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     diocese_id      INT NOT NULL,
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_region_diocese
         FOREIGN KEY (diocese_id) REFERENCES diocese(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_region_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_region_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -63,11 +72,13 @@ CREATE TABLE district (
     carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     region_id       INT NOT NULL,
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_district_region
         FOREIGN KEY (region_id) REFERENCES region(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_district_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_district_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -79,11 +90,13 @@ CREATE TABLE paroisse (
     carte_qgis      GEOMETRY(Polygon, 4326),  -- limite de la zone, importée depuis QGIS
     district_id     INT NOT NULL,
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_paroisse_district
         FOREIGN KEY (district_id) REFERENCES district(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_paroisse_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_paroisse_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -98,11 +111,13 @@ CREATE TABLE eglise (
     lien_facebook   VARCHAR(255),
     paroisse_id     INT NOT NULL,
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_eglise_paroisse
         FOREIGN KEY (paroisse_id) REFERENCES paroisse(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_eglise_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_eglise_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================
@@ -139,13 +154,15 @@ CREATE TABLE ressource (
     type_id         INT NOT NULL,
     eglise_id       INT NOT NULL,
     responsable_id  INT,
+    etat            SMALLINT NOT NULL DEFAULT 1,  -- 1 = actif, -1 = supprimé (suppression logique)
     CONSTRAINT fk_ressource_type
         FOREIGN KEY (type_id) REFERENCES type_ressource(id),
     CONSTRAINT fk_ressource_eglise
         FOREIGN KEY (eglise_id) REFERENCES eglise(id)
         ON DELETE CASCADE,
     CONSTRAINT fk_ressource_responsable
-        FOREIGN KEY (responsable_id) REFERENCES clerge(id)
+        FOREIGN KEY (responsable_id) REFERENCES clerge(id),
+    CONSTRAINT ck_ressource_etat CHECK (etat IN (1, -1))
 );
 
 -- =========================================================

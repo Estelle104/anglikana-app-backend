@@ -40,9 +40,9 @@ public class GeographieRepository {
 
     private static final String JOINTURES_HIERARCHIE = """
             FROM eglise e
-            JOIN paroisse pa ON pa.id = e.paroisse_id
-            JOIN district di ON di.id = pa.district_id
-            JOIN region r ON r.id = di.region_id
+            JOIN paroisse pa ON pa.id = e.paroisse_id AND pa.etat = 1
+            JOIN district di ON di.id = pa.district_id AND di.etat = 1
+            JOIN region r ON r.id = di.region_id AND r.etat = 1
             """;
 
     @PersistenceContext
@@ -62,6 +62,7 @@ public class GeographieRepository {
                 SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson
                 FROM %s z
                 WHERE z.carte_qgis IS NOT NULL
+                  AND z.etat = 1
                 ORDER BY z.nom
                 """.formatted(PRECISION_GEOJSON, table(niveau));
         return versZones(entityManager.createNativeQuery(sql, Tuple.class).getResultList());
@@ -72,6 +73,7 @@ public class GeographieRepository {
                 SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson
                 FROM %s z
                 WHERE z.id = :id
+                  AND z.etat = 1
                 """.formatted(PRECISION_GEOJSON, table(niveau));
         return versZones(entityManager.createNativeQuery(sql, Tuple.class).setParameter("id", id).getResultList())
                 .stream().findFirst();
@@ -81,9 +83,9 @@ public class GeographieRepository {
     public List<LigneZone> sousZones(NiveauHierarchique niveau, Integer id) {
         String sql = switch (niveau) {
             case DIOCESE -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson FROM region z "
-                    + "WHERE z.diocese_id = :id AND z.carte_qgis IS NOT NULL ORDER BY z.nom";
+                    + "WHERE z.diocese_id = :id AND z.carte_qgis IS NOT NULL AND z.etat = 1 ORDER BY z.nom";
             case REGION -> "SELECT z.id, z.nom, ST_AsGeoJSON(z.carte_qgis, %d) AS geojson FROM district z "
-                    + "WHERE z.region_id = :id AND z.carte_qgis IS NOT NULL ORDER BY z.nom";
+                    + "WHERE z.region_id = :id AND z.carte_qgis IS NOT NULL AND z.etat = 1 ORDER BY z.nom";
             default -> null;
         };
         if (sql == null) {
@@ -97,9 +99,10 @@ public class GeographieRepository {
     public List<EgliseLocaliseeDTO> eglisesDansZone(NiveauHierarchique niveau, Integer id) {
         String sql = SELECT_EGLISE_LOCALISEE + """
                 FROM %s z
-                JOIN eglise e ON ST_Covers(z.carte_qgis, e.localisation)
-                JOIN paroisse pa ON pa.id = e.paroisse_id
+                JOIN eglise e ON ST_Covers(z.carte_qgis, e.localisation) AND e.etat = 1
+                JOIN paroisse pa ON pa.id = e.paroisse_id AND pa.etat = 1
                 WHERE z.id = :id
+                  AND z.etat = 1
                 ORDER BY e.nom
                 """.formatted(table(niveau));
         return versEglises(entityManager.createNativeQuery(sql, Tuple.class).setParameter("id", id).getResultList());
@@ -108,8 +111,9 @@ public class GeographieRepository {
     /** Églises rattachées hiérarchiquement à la zone mais localisées hors de son polygone. */
     public List<EgliseLocaliseeDTO> eglisesHorsZone(NiveauHierarchique niveau, Integer id) {
         String sql = SELECT_EGLISE_LOCALISEE + JOINTURES_HIERARCHIE + """
-                JOIN %s z ON z.id = %s
+                JOIN %s z ON z.id = %s AND z.etat = 1
                 WHERE %s = :id
+                  AND e.etat = 1
                   AND e.localisation IS NOT NULL
                   AND z.carte_qgis IS NOT NULL
                   AND NOT ST_Covers(z.carte_qgis, e.localisation)
@@ -122,6 +126,7 @@ public class GeographieRepository {
     public List<EgliseLocaliseeDTO> eglisesRattachees(NiveauHierarchique niveau, Integer id) {
         String sql = SELECT_EGLISE_LOCALISEE + JOINTURES_HIERARCHIE + """
                 WHERE %s = :id
+                  AND e.etat = 1
                   AND e.localisation IS NOT NULL
                 ORDER BY e.nom
                 """.formatted(colonneRattachement(niveau));
@@ -141,15 +146,18 @@ public class GeographieRepository {
                     SELECT 'diocese' AS niveau, d.id, d.nom,
                            CAST(NULL AS varchar) AS region_nom, CAST(NULL AS varchar) AS diocese_nom
                     FROM diocese d
+                    WHERE d.etat = 1
                     UNION ALL
                     SELECT 'region', r.id, r.nom, NULL, d.nom
                     FROM region r
-                    JOIN diocese d ON d.id = r.diocese_id
+                    JOIN diocese d ON d.id = r.diocese_id AND d.etat = 1
+                    WHERE r.etat = 1
                     UNION ALL
                     SELECT 'district', di.id, di.nom, r.nom, d.nom
                     FROM district di
-                    JOIN region r ON r.id = di.region_id
-                    JOIN diocese d ON d.id = r.diocese_id
+                    JOIN region r ON r.id = di.region_id AND r.etat = 1
+                    JOIN diocese d ON d.id = r.diocese_id AND d.etat = 1
+                    WHERE di.etat = 1
                 ) z
                 WHERE (:niveau = '' OR z.niveau = :niveau)
                   AND (:terme = ''
@@ -179,13 +187,14 @@ public class GeographieRepository {
      * Enregistre la carte QGIS (colonne carte_qgis) d'une zone.
      *
      * @param geojson Polygon GeoJSON en WGS 84, déjà validé et normalisé par GeometrieMapper
-     * @return nombre de lignes mises à jour (0 si la zone n'existe pas)
+     * @return nombre de lignes mises à jour (0 si la zone n'existe pas ou est supprimée, etat = -1)
      */
     public int majCarteQgis(NiveauHierarchique niveau, Integer id, String geojson) {
         String sql = """
                 UPDATE %s
                 SET carte_qgis = ST_SetSRID(ST_GeomFromGeoJSON(:geojson), 4326)
                 WHERE id = :id
+                  AND etat = 1
                 """.formatted(table(niveau));
         return entityManager.createNativeQuery(sql)
                 .setParameter("geojson", geojson)

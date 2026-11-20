@@ -74,11 +74,15 @@ public class TableauBordService {
         this.ressourceRepository = ressourceRepository;
     }
 
-    /** Vue d'ensemble : totaux de la hiérarchie et statistiques de chaque diocèse. */
+    /**
+     * Vue d'ensemble restreinte à des diocèses : totaux de ces diocèses (le clergé est compté une
+     * seule fois) et statistiques de chacun. Un identifiant inconnu ou supprimé est ignoré.
+     */
     @Transactional(readOnly = true)
-    public ApercuHierarchieDTO getApercu() {
-        LigneStatistique totaux = statistiqueRepository.totaux();
-        List<LigneStatistique> lignesDioceses = statistiqueRepository.statistiquesParEntite(NiveauHierarchique.DIOCESE, null, null);
+    public ApercuHierarchieDTO getApercu(Collection<Integer> dioceseIds) {
+        LigneStatistique totaux = statistiqueRepository.totaux(dioceseIds);
+        List<LigneStatistique> lignesDioceses = statistiqueRepository.statistiquesParEntite(NiveauHierarchique.DIOCESE, null, null)
+                .stream().filter(ligne -> dioceseIds.contains(ligne.id())).toList();
         Map<Integer, ClergeDTO> clerges = chargerClerges(responsablesDe(lignesDioceses));
 
         TotauxHierarchieDTO totauxDTO = new TotauxHierarchieDTO();

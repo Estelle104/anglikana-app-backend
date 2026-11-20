@@ -1,6 +1,11 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.config.OpenApiConfig;
+import com.anglikana.backoffice.dto.NiveauHierarchique;
+import com.anglikana.backoffice.security.AutorisationService;
+import com.anglikana.backoffice.security.CascadeAuthorised;
+import com.anglikana.backoffice.security.EntiteProtegee;
+import com.anglikana.backoffice.security.NeedAuthorisation;
 import com.anglikana.backoffice.dto.EgliseDTO;
 import com.anglikana.backoffice.dto.RessourceDTO;
 import com.anglikana.backoffice.entity.Clerge;
@@ -15,6 +20,7 @@ import com.anglikana.backoffice.service.HierarchieService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,10 +30,10 @@ import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.PrecisionModel;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -44,11 +50,14 @@ public class EgliseController {
     private final ParoisseRepository paroisseRepository;
     private final ClergeRepository clergeRepository;
     private final HierarchieService hierarchieService;
+    private final AutorisationService autorisationService;
 
     public EgliseController(EgliseRepository egliseRepository,
                              ParoisseRepository paroisseRepository,
                              ClergeRepository clergeRepository,
-                             HierarchieService hierarchieService) {
+                             HierarchieService hierarchieService,
+                            AutorisationService autorisationService) {
+        this.autorisationService = autorisationService;
         this.egliseRepository = egliseRepository;
         this.paroisseRepository = paroisseRepository;
         this.clergeRepository = clergeRepository;
@@ -56,7 +65,7 @@ public class EgliseController {
     }
 
     @GetMapping
-    @Operation(summary = "Lister les églises", description = "Toutes les églises, sans pagination. Lecture publique.")
+    @Operation(summary = "Lister les églises", description = "Toutes les églises, sans pagination. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Liste des églises")
     public List<EgliseDTO> getAll() {
         return egliseRepository.findAll()
@@ -64,7 +73,7 @@ public class EgliseController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consulter une église", description = "Lecture publique. latitude/longitude sont null si l'église n'est pas localisée.")
+    @Operation(summary = "Consulter une église", description = "Lecture publique, éléments supprimés (etat = -1) exclus. latitude/longitude sont null si l'église n'est pas localisée.")
     @ApiResponse(responseCode = "200", description = "Église trouvée")
     @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
     public ResponseEntity<EgliseDTO> getById(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
@@ -79,7 +88,7 @@ public class EgliseController {
     }
 
     @GetMapping("/{id}/ressources")
-    @Operation(summary = "Lister les ressources d'une église", description = "Ressources rattachées à l'église, triées par nom. Lecture publique.")
+    @Operation(summary = "Lister les ressources d'une église", description = "Ressources rattachées à l'église, triées par nom. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Ressources de l'église (liste vide si aucune)")
     @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
     public ResponseEntity<List<RessourceDTO>> getRessources(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
@@ -89,12 +98,14 @@ public class EgliseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.PAROISSE, id = "#dto.paroisseId")
+    @CascadeAuthorised
     @Operation(summary = "Créer une église",
-            description = "Réservé au rôle ADMIN. paroisseId est obligatoire ; la localisation n'est enregistrée que si latitude et longitude sont toutes deux fournies (WGS 84).")
+            description = "Réservé au responsable de la paroisse paroisseId ou de l'un de ses ancêtres. paroisseId est obligatoire ; la localisation n'est enregistrée que si latitude et longitude sont toutes deux fournies (WGS 84).")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "201", description = "Église créée")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent, paroisseId absent, ou hors du périmètre de la paroisse paroisseId", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Paroisse paroisseId introuvable ou supprimée", content = @Content)
     public ResponseEntity<EgliseDTO> create(@RequestBody EgliseDTO dto) {
         Eglise eglise = new Eglise();
         appliquerDTO(eglise, dto);
@@ -104,18 +115,24 @@ public class EgliseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.EGLISE, id = "#id")
+    @CascadeAuthorised
     @Operation(summary = "Modifier une église",
-            description = "Réservé au rôle ADMIN. Remplace tous les champs ; sans latitude ou sans longitude, la localisation est effacée.")
+            description = "Réservé au responsable de l'église ou de l'un de ses ancêtres. Changer paroisseId exige aussi d'être responsable de la nouvelle paroisse ou d'un de ses ancêtres. Remplace tous les champs ; sans latitude ou sans longitude, la localisation est effacée.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "200", description = "Église modifiée")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
-    @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent, ou hors du périmètre de l'église ou de la nouvelle paroisse", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Église ou nouvelle paroisse introuvable", content = @Content)
     public ResponseEntity<EgliseDTO> update(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id, @RequestBody EgliseDTO dto) {
         Optional<Eglise> egliseOptionnel = egliseRepository.findById(id);
 
         if (egliseOptionnel.isPresent()) {
             Eglise eglise = egliseOptionnel.get();
+            Integer parentActuel = eglise.getParoisse() != null ? eglise.getParoisse().getId() : null;
+            if (!Objects.equals(dto.getParoisseId(), parentActuel)) {
+                // Rattachement à un autre parent : il doit lui aussi être dans le périmètre.
+                autorisationService.verifier(EntiteProtegee.PAROISSE, dto.getParoisseId(), true);
+            }
             appliquerDTO(eglise, dto);
             Eglise updated = egliseRepository.save(eglise);
             return ResponseEntity.ok(EgliseMapper.toDTO(updated));
@@ -125,16 +142,23 @@ public class EgliseController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.EGLISE, id = "#id")
+    @CascadeAuthorised
     @Operation(summary = "Supprimer une église",
-            description = "Réservé au rôle ADMIN. La base supprime en cascade ses ressources et ses horaires de culte.")
+            description = "Réservé au responsable de l'église ou de l'un de ses ancêtres. Suppression logique (etat = -1), refusée tant qu'une ressource active y est rattachée.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "204", description = "Église supprimée", content = @Content)
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou hors du périmètre de l'église", content = @Content)
     @ApiResponse(responseCode = "404", description = "Église introuvable", content = @Content)
+    @ApiResponse(responseCode = "409", description = "Au moins une fille directe est encore active (message explicatif)",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> delete(@Parameter(description = "Identifiant de l'église") @PathVariable Integer id) {
         if (!egliseRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
+        }
+        Optional<String> refus = hierarchieService.refusSuppression(NiveauHierarchique.EGLISE, id);
+        if (refus.isPresent()) {
+            return ResponseEntity.status(409).body(refus.get());
         }
         egliseRepository.deleteById(id);
         return ResponseEntity.noContent().build();

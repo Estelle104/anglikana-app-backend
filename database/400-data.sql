@@ -2,20 +2,25 @@
 -- =========================================================
 -- DATA : ROLE
 -- =========================================================
+-- id = niveau ; 5 = le plus haut. Les droits viennent du niveau et des responsable_id.
 INSERT INTO role (id, nom, niveau, description) VALUES
-(1, 'Admin', 1, 'Administrateur système'),
-(2, 'Curé', 2, 'Responsable paroissial'),
-(3, 'Diacre', 3, 'Aide pastorale');
+(1, 'Katekista', 1, 'Responsable d''une église'),
+(2, 'Presbytère', 2, 'Responsable d''une paroisse'),
+(3, 'Doyen', 3, 'Responsable d''un district'),
+(4, 'Archidiacre', 4, 'Responsable d''une région'),
+(5, 'Évêque', 5, 'Responsable d''un diocèse');
 
 -- =========================================================
 -- DATA : CLERGE
+-- role_id = plus haute responsabilité : 1 et 2 diocèse (Évêque), 3 et 4 district (Doyen),
+-- 5 église (Katekista).
 -- =========================================================
 INSERT INTO clerge (id, nom, prenom, date_naissance, hierarchie, telephone, email, role_id) VALUES
-(1, 'Rakoto', 'Jean', '1980-05-12', 'Prêtre', '+261 34 12 345 67', 'jean.rakoto@eglise.mg', 1),
-(2, 'Randria', 'Marie', '1985-02-20', 'Diacre', '+261 34 22 456 78', 'marie.randria@eglise.mg', 3),
-(3, 'Andriamihaja', 'Paul', '1975-11-08', 'Curé', '+261 34 33 567 89', 'paul.andria@eglise.mg', 2),
-(4, 'Rabe', 'Benoît', '1988-09-15', 'Prêtre', '+261 34 44 678 90', 'benoit.rabe@eglise.mg', 2),
-(5, 'Rasolonjatovo', 'Claire', '1990-06-11', 'Diaconesse', '+261 34 55 789 01', 'claire.rasolon@eglise.mg', 3);
+(1, 'Rakoto', 'Jean', '1980-05-12', 'Prêtre', '+261 34 12 345 67', 'jean.rakoto@eglise.mg', 5),
+(2, 'Randria', 'Marie', '1985-02-20', 'Diacre', '+261 34 22 456 78', 'marie.randria@eglise.mg', 5),
+(3, 'Andriamihaja', 'Paul', '1975-11-08', 'Curé', '+261 34 33 567 89', 'paul.andria@eglise.mg', 3),
+(4, 'Rabe', 'Benoît', '1988-09-15', 'Prêtre', '+261 34 44 678 90', 'benoit.rabe@eglise.mg', 3),
+(5, 'Rasolonjatovo', 'Claire', '1990-06-11', 'Diaconesse', '+261 34 55 789 01', 'claire.rasolon@eglise.mg', 1);
 
 -- =========================================================
 -- DATA : DIOCESE

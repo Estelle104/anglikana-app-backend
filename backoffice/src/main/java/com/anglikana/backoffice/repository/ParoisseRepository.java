@@ -9,4 +9,8 @@ import java.util.List;
 @Repository
 public interface ParoisseRepository extends JpaRepository<Paroisse, Integer> {
     List<Paroisse> findByDistrictIdOrderByNomAsc(Integer districtId);
+
+    boolean existsByDistrictId(Integer districtId);
+
+    boolean existsByResponsableId(Integer responsableId);
 }

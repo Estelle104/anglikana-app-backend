@@ -64,12 +64,10 @@ class Sprint2PostgisIntegrationTest {
     @Autowired private GeographieService geographieService;
     @Autowired private HierarchieService hierarchieService;
 
-    private TotauxHierarchieDTO totauxAvant;
     private JeuDonneesHierarchie donnees;
 
     @BeforeEach
     void preparer() {
-        totauxAvant = tableauBordService.getApercu().getTotaux();
         donnees = new JeuDonneesHierarchie().inserer(em);
     }
 
@@ -137,18 +135,27 @@ class Sprint2PostgisIntegrationTest {
     // ------------------------------------------------------------------ Tableau de bord (service)
 
     @Test
-    void apercuAugmenteExactementDuJeuDeDonnees() {
-        ApercuHierarchieDTO apercu = tableauBordService.getApercu();
-        TotauxHierarchieDTO apres = apercu.getTotaux();
+    void apercuLimiteAuxDiocesesDemandes() {
+        ApercuHierarchieDTO apercu = tableauBordService.getApercu(List.of(donnees.d.getId()));
+        TotauxHierarchieDTO totaux = apercu.getTotaux();
 
-        assertThat(apres.getDioceses() - totauxAvant.getDioceses()).isEqualTo(1);
-        assertThat(apres.getRegions() - totauxAvant.getRegions()).isEqualTo(2);
-        assertThat(apres.getDistricts() - totauxAvant.getDistricts()).isEqualTo(2);
-        assertThat(apres.getParoisses() - totauxAvant.getParoisses()).isEqualTo(2);
-        assertThat(apres.getEglises() - totauxAvant.getEglises()).isEqualTo(4);
-        assertThat(apres.getRessources() - totauxAvant.getRessources()).isEqualTo(2);
-        assertThat(apres.getClerges() - totauxAvant.getClerges()).isEqualTo(3);
-        assertThat(apercu.getDioceses()).extracting(NoeudHierarchiqueDTO::getId).contains(donnees.d.getId());
+        assertThat(totaux.getDioceses()).isEqualTo(1);
+        assertThat(totaux.getRegions()).isEqualTo(2);
+        assertThat(totaux.getDistricts()).isEqualTo(2);
+        assertThat(totaux.getParoisses()).isEqualTo(2);
+        assertThat(totaux.getEglises()).isEqualTo(4);
+        assertThat(totaux.getRessources()).isEqualTo(2);
+        assertThat(totaux.getClerges()).isEqualTo(3);
+        assertThat(apercu.getDioceses()).extracting(NoeudHierarchiqueDTO::getId).containsExactly(donnees.d.getId());
+    }
+
+    @Test
+    void apercuSansDioceseEstVide() {
+        ApercuHierarchieDTO apercu = tableauBordService.getApercu(List.of());
+
+        assertThat(apercu.getTotaux().getDioceses()).isZero();
+        assertThat(apercu.getTotaux().getClerges()).isZero();
+        assertThat(apercu.getDioceses()).isEmpty();
     }
 
     @Test

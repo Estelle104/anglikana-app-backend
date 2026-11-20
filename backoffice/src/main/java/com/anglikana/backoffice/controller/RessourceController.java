@@ -1,6 +1,10 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.config.OpenApiConfig;
+import com.anglikana.backoffice.security.AutorisationService;
+import com.anglikana.backoffice.security.CascadeAuthorised;
+import com.anglikana.backoffice.security.EntiteProtegee;
+import com.anglikana.backoffice.security.NeedAuthorisation;
 import com.anglikana.backoffice.dto.RessourceDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Eglise;
@@ -19,10 +23,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -35,11 +39,14 @@ public class RessourceController {
     private final TypeRessourceRepository typeRessourceRepository;
     private final EgliseRepository egliseRepository;
     private final ClergeRepository clergeRepository;
+    private final AutorisationService autorisationService;
 
     public RessourceController(RessourceRepository ressourceRepository,
                                 TypeRessourceRepository typeRessourceRepository,
                                 EgliseRepository egliseRepository,
-                                ClergeRepository clergeRepository) {
+                                ClergeRepository clergeRepository,
+                               AutorisationService autorisationService) {
+        this.autorisationService = autorisationService;
         this.ressourceRepository = ressourceRepository;
         this.typeRessourceRepository = typeRessourceRepository;
         this.egliseRepository = egliseRepository;
@@ -47,7 +54,7 @@ public class RessourceController {
     }
 
     @GetMapping
-    @Operation(summary = "Lister les ressources", description = "Toutes les ressources, sans pagination. Lecture publique.")
+    @Operation(summary = "Lister les ressources", description = "Toutes les ressources, sans pagination. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Liste des ressources")
     public List<RessourceDTO> getAll() {
         return ressourceRepository.findAll()
@@ -55,7 +62,7 @@ public class RessourceController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consulter une ressource", description = "Lecture publique.")
+    @Operation(summary = "Consulter une ressource", description = "Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Ressource trouvée")
     @ApiResponse(responseCode = "404", description = "Ressource introuvable", content = @Content)
     public ResponseEntity<RessourceDTO> getById(@Parameter(description = "Identifiant de la ressource") @PathVariable Integer id) {
@@ -70,12 +77,14 @@ public class RessourceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @NeedAuthorisation(entity = EntiteProtegee.EGLISE, id = "#dto.egliseId")
+    @CascadeAuthorised
     @Operation(summary = "Créer une ressource",
-            description = "Réservé au rôle ADMIN. typeId (voir /api/types-ressource) et egliseId sont obligatoires.")
+            description = "Réservé au responsable de l'église egliseId ou de l'un de ses ancêtres. typeId (voir /api/types-ressource) et egliseId sont obligatoires.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "201", description = "Ressource créée")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent, egliseId absent, ou hors du périmètre de l'église egliseId", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Église egliseId introuvable ou supprimée", content = @Content)
     public ResponseEntity<RessourceDTO> create(@RequestBody RessourceDTO dto) {
         Ressource ressource = new Ressource();
         appliquerDTO(ressource, dto);
@@ -85,17 +94,23 @@ public class RessourceController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Modifier une ressource", description = "Réservé au rôle ADMIN. Remplace tous les champs.")
+    @NeedAuthorisation(entity = EntiteProtegee.RESSOURCE, id = "#id")
+    @CascadeAuthorised
+    @Operation(summary = "Modifier une ressource", description = "Réservé au responsable de la ressource ou de l'un de ses ancêtres. Changer egliseId exige aussi d'être responsable de la nouvelle église ou d'un de ses ancêtres. Remplace tous les champs.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "200", description = "Ressource modifiée")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
-    @ApiResponse(responseCode = "404", description = "Ressource introuvable", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent, ou hors du périmètre de la ressource ou de la nouvelle église", content = @Content)
+    @ApiResponse(responseCode = "404", description = "Ressource ou nouvelle église introuvable", content = @Content)
     public ResponseEntity<RessourceDTO> update(@Parameter(description = "Identifiant de la ressource") @PathVariable Integer id, @RequestBody RessourceDTO dto) {
         Optional<Ressource> ressourceOptionnel = ressourceRepository.findById(id);
 
         if (ressourceOptionnel.isPresent()) {
             Ressource ressource = ressourceOptionnel.get();
+            Integer parentActuel = ressource.getEglise() != null ? ressource.getEglise().getId() : null;
+            if (!Objects.equals(dto.getEgliseId(), parentActuel)) {
+                // Rattachement à un autre parent : il doit lui aussi être dans le périmètre.
+                autorisationService.verifier(EntiteProtegee.EGLISE, dto.getEgliseId(), true);
+            }
             appliquerDTO(ressource, dto);
             Ressource updated = ressourceRepository.save(ressource);
             return ResponseEntity.ok(RessourceMapper.toDTO(updated));
@@ -105,11 +120,12 @@ public class RessourceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Supprimer une ressource", description = "Réservé au rôle ADMIN.")
+    @NeedAuthorisation(entity = EntiteProtegee.RESSOURCE, id = "#id")
+    @CascadeAuthorised
+    @Operation(summary = "Supprimer une ressource", description = "Réservé au responsable de la ressource ou de l'un de ses ancêtres. Suppression logique (etat = -1).")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "204", description = "Ressource supprimée", content = @Content)
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou hors du périmètre de la ressource", content = @Content)
     @ApiResponse(responseCode = "404", description = "Ressource introuvable", content = @Content)
     public ResponseEntity<?> delete(@Parameter(description = "Identifiant de la ressource") @PathVariable Integer id) {
         if (!ressourceRepository.existsById(id)) {

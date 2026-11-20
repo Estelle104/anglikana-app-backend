@@ -1,6 +1,8 @@
 package com.anglikana.backoffice.controller;
 
 import com.anglikana.backoffice.config.OpenApiConfig;
+import com.anglikana.backoffice.security.LevelRequired;
+import com.anglikana.backoffice.service.HierarchieService;
 import com.anglikana.backoffice.dto.ClergeDTO;
 import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Role;
@@ -11,11 +13,11 @@ import com.anglikana.backoffice.repository.RoleRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,15 +31,18 @@ public class ClergeController {
 
     private final ClergeRepository clergeRepository;
     private final RoleRepository roleRepository;
+    private final HierarchieService hierarchieService;
 
     public ClergeController(ClergeRepository clergeRepository,
-                             RoleRepository roleRepository) {
+                             RoleRepository roleRepository,
+                             HierarchieService hierarchieService) {
         this.clergeRepository = clergeRepository;
         this.roleRepository = roleRepository;
+        this.hierarchieService = hierarchieService;
     }
 
     @GetMapping
-    @Operation(summary = "Lister le clergé", description = "Tous les membres du clergé, sans pagination. Lecture publique.")
+    @Operation(summary = "Lister le clergé", description = "Tous les membres du clergé, sans pagination. Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Liste des membres du clergé")
     public List<ClergeDTO> getAll() {
         return clergeRepository.findAll()
@@ -45,7 +50,7 @@ public class ClergeController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Consulter un membre du clergé", description = "Lecture publique.")
+    @Operation(summary = "Consulter un membre du clergé", description = "Lecture publique, éléments supprimés (etat = -1) exclus.")
     @ApiResponse(responseCode = "200", description = "Membre du clergé trouvé")
     @ApiResponse(responseCode = "404", description = "Membre du clergé introuvable", content = @Content)
     public ResponseEntity<ClergeDTO> getById(@Parameter(description = "Identifiant du membre du clergé") @PathVariable Integer id) {
@@ -60,12 +65,12 @@ public class ClergeController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @LevelRequired(5)
     @Operation(summary = "Créer un membre du clergé",
-            description = "Réservé au rôle ADMIN. nom est obligatoire ; un roleId inconnu est ignoré (rôle vide).")
+            description = "Réservé au niveau 5 (Évêque). nom est obligatoire ; un roleId inconnu est ignoré (rôle vide).")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "201", description = "Membre du clergé créé")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou niveau 5 requis", content = @Content)
     public ResponseEntity<ClergeDTO> create(@RequestBody ClergeDTO dto) {
         Clerge clerge = new Clerge();
         appliquerDTO(clerge, dto);
@@ -75,11 +80,12 @@ public class ClergeController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Modifier un membre du clergé", description = "Réservé au rôle ADMIN. Remplace tous les champs.")
+    @LevelRequired(5)
+    @Operation(summary = "Modifier un membre du clergé",
+            description = "Réservé au niveau 5 (Évêque). Remplace tous les champs ; roleId fixe le niveau des droits du clergé.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "200", description = "Membre du clergé modifié")
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou niveau 5 requis", content = @Content)
     @ApiResponse(responseCode = "404", description = "Membre du clergé introuvable", content = @Content)
     public ResponseEntity<ClergeDTO> update(@Parameter(description = "Identifiant du membre du clergé") @PathVariable Integer id, @RequestBody ClergeDTO dto) {
         Optional<Clerge> clergeOptionnel = clergeRepository.findById(id);
@@ -95,16 +101,23 @@ public class ClergeController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @LevelRequired(5)
     @Operation(summary = "Supprimer un membre du clergé",
-            description = "Réservé au rôle ADMIN. Échoue s'il est encore responsable d'une entité ou lié à un compte (contrainte de clé étrangère).")
+            description = "Réservé au niveau 5 (Évêque). Suppression logique (etat = -1), refusée tant qu'il est responsable "
+                    + "d'une entité ou d'une ressource active. Son compte ne peut plus se connecter et perd tous ses droits.")
     @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "204", description = "Membre du clergé supprimé", content = @Content)
-    @ApiResponse(responseCode = "403", description = "Rôle ADMIN requis ou jeton absent", content = @Content)
+    @ApiResponse(responseCode = "403", description = "Jeton absent ou niveau 5 requis", content = @Content)
     @ApiResponse(responseCode = "404", description = "Membre du clergé introuvable", content = @Content)
+    @ApiResponse(responseCode = "409", description = "Encore responsable d'une entité ou d'une ressource active",
+            content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> delete(@Parameter(description = "Identifiant du membre du clergé") @PathVariable Integer id) {
         if (!clergeRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
+        }
+        if (hierarchieService.estResponsableActif(id)) {
+            return ResponseEntity.status(409)
+                    .body("Suppression impossible : ce membre du clergé est encore responsable d'une entité ou d'une ressource active.");
         }
         clergeRepository.deleteById(id);
         return ResponseEntity.noContent().build();

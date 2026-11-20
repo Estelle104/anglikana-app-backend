@@ -2,6 +2,7 @@ package com.anglikana.backoffice.service;
 
 import com.anglikana.backoffice.dto.DistrictDTO;
 import com.anglikana.backoffice.dto.EgliseDTO;
+import com.anglikana.backoffice.dto.NiveauHierarchique;
 import com.anglikana.backoffice.dto.ParoisseDTO;
 import com.anglikana.backoffice.dto.RegionDTO;
 import com.anglikana.backoffice.dto.RessourceDTO;
@@ -106,6 +107,37 @@ public class HierarchieService {
         }
         return Optional.of(ressourceRepository.findByEgliseIdOrderByNomAsc(egliseId)
                 .stream().map(RessourceMapper::toDTO).toList());
+    }
+
+    /**
+     * Motif de refus de la suppression logique d'une entité : elle a encore au moins une fille
+     * directe active (les petites-filles ne sont pas regardées). Les filles d'une église sont ses
+     * ressources. Vide si la suppression est possible.
+     */
+    public Optional<String> refusSuppression(NiveauHierarchique niveau, Integer id) {
+        String motif = switch (niveau) {
+            case DIOCESE -> regionRepository.existsByDioceseId(id)
+                    ? "le diocèse contient encore au moins une région active" : null;
+            case REGION -> districtRepository.existsByRegionId(id)
+                    ? "la région contient encore au moins un district actif" : null;
+            case DISTRICT -> paroisseRepository.existsByDistrictId(id)
+                    ? "le district contient encore au moins une paroisse active" : null;
+            case PAROISSE -> egliseRepository.existsByParoisseId(id)
+                    ? "la paroisse contient encore au moins une église active" : null;
+            case EGLISE -> ressourceRepository.existsByEgliseId(id)
+                    ? "l'église contient encore au moins une ressource active" : null;
+        };
+        return Optional.ofNullable(motif).map(texte -> "Suppression impossible : " + texte + ".");
+    }
+
+    /** Vrai si le membre du clergé est responsable d'au moins une entité ou ressource active. */
+    public boolean estResponsableActif(Integer clergeId) {
+        return dioceseRepository.existsByResponsableId(clergeId)
+                || regionRepository.existsByResponsableId(clergeId)
+                || districtRepository.existsByResponsableId(clergeId)
+                || paroisseRepository.existsByResponsableId(clergeId)
+                || egliseRepository.existsByResponsableId(clergeId)
+                || ressourceRepository.existsByResponsableId(clergeId);
     }
 
     public List<TypeRessourceDTO> getTypesRessource() {

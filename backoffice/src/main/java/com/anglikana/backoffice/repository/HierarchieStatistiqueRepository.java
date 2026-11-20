@@ -10,6 +10,7 @@ import jakarta.persistence.Tuple;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -26,42 +27,49 @@ import java.util.List;
 @Repository
 public class HierarchieStatistiqueRepository {
 
-    private static final String PERIMETRE = """
+    /** Partagée avec {@link PerimetreRepository} : seules les lignes actives (etat = 1) y figurent. */
+    static final String PERIMETRE = """
             WITH perimetre AS (
                 SELECT 'diocese' AS niveau, 1 AS rang, d.id, d.nom, d.responsable_id,
                        d.id AS diocese_id, CAST(NULL AS integer) AS region_id, CAST(NULL AS integer) AS district_id,
                        CAST(NULL AS integer) AS paroisse_id, CAST(NULL AS integer) AS eglise_id
                 FROM diocese d
+                WHERE d.etat = 1
                 UNION ALL
                 SELECT 'region', 2, r.id, r.nom, r.responsable_id,
                        r.diocese_id, r.id, NULL, NULL, NULL
                 FROM region r
+                WHERE r.etat = 1
                 UNION ALL
                 SELECT 'district', 3, di.id, di.nom, di.responsable_id,
                        r.diocese_id, di.region_id, di.id, NULL, NULL
                 FROM district di
-                JOIN region r ON r.id = di.region_id
+                JOIN region r ON r.id = di.region_id AND r.etat = 1
+                WHERE di.etat = 1
                 UNION ALL
                 SELECT 'paroisse', 4, pa.id, pa.nom, pa.responsable_id,
                        r.diocese_id, di.region_id, pa.district_id, pa.id, NULL
                 FROM paroisse pa
-                JOIN district di ON di.id = pa.district_id
-                JOIN region r ON r.id = di.region_id
+                JOIN district di ON di.id = pa.district_id AND di.etat = 1
+                JOIN region r ON r.id = di.region_id AND r.etat = 1
+                WHERE pa.etat = 1
                 UNION ALL
                 SELECT 'eglise', 5, e.id, e.nom, e.responsable_id,
                        r.diocese_id, di.region_id, pa.district_id, e.paroisse_id, e.id
                 FROM eglise e
-                JOIN paroisse pa ON pa.id = e.paroisse_id
-                JOIN district di ON di.id = pa.district_id
-                JOIN region r ON r.id = di.region_id
+                JOIN paroisse pa ON pa.id = e.paroisse_id AND pa.etat = 1
+                JOIN district di ON di.id = pa.district_id AND di.etat = 1
+                JOIN region r ON r.id = di.region_id AND r.etat = 1
+                WHERE e.etat = 1
                 UNION ALL
                 SELECT 'ressource', 6, rs.id, rs.nom, rs.responsable_id,
                        r.diocese_id, di.region_id, pa.district_id, e.paroisse_id, rs.eglise_id
                 FROM ressource rs
-                JOIN eglise e ON e.id = rs.eglise_id
-                JOIN paroisse pa ON pa.id = e.paroisse_id
-                JOIN district di ON di.id = pa.district_id
-                JOIN region r ON r.id = di.region_id
+                JOIN eglise e ON e.id = rs.eglise_id AND e.etat = 1
+                JOIN paroisse pa ON pa.id = e.paroisse_id AND pa.etat = 1
+                JOIN district di ON di.id = pa.district_id AND di.etat = 1
+                JOIN region r ON r.id = di.region_id AND r.etat = 1
+                WHERE rs.etat = 1
             )
             """;
 
@@ -127,10 +135,18 @@ public class HierarchieStatistiqueRepository {
         return lignes;
     }
 
-    /** Totaux de toute la hiérarchie (le clergé est compté une seule fois, tous diocèses confondus). */
-    public LigneStatistique totaux() {
-        String sql = PERIMETRE + "SELECT\n" + COMPTAGES + "FROM perimetre p";
-        Tuple tuple = (Tuple) entityManager.createNativeQuery(sql, Tuple.class).getSingleResult();
+    /**
+     * Totaux restreints à des diocèses (le clergé est compté une seule fois sur l'ensemble).
+     * Tous les compteurs valent 0 si la liste est vide.
+     */
+    public LigneStatistique totaux(Collection<Integer> dioceseIds) {
+        if (dioceseIds.isEmpty()) {
+            return new LigneStatistique(null, null, null, 0, 0, 0, 0, 0, 0, 0);
+        }
+        String sql = PERIMETRE + "SELECT\n" + COMPTAGES + "FROM perimetre p\nWHERE p.diocese_id IN (:ids)";
+        Tuple tuple = (Tuple) entityManager.createNativeQuery(sql, Tuple.class)
+                .setParameter("ids", dioceseIds)
+                .getSingleResult();
         return versLigne(tuple, null, null, null);
     }
 

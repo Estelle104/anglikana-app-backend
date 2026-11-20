@@ -17,4 +17,8 @@ public interface RessourceRepository extends JpaRepository<Ressource, Integer> {
     @Query("select r from Ressource r join fetch r.type left join fetch r.responsable "
             + "where r.eglise.id = :egliseId order by r.nom")
     List<Ressource> findDetailleesByEgliseId(@Param("egliseId") Integer egliseId);
+
+    boolean existsByEgliseId(Integer egliseId);
+
+    boolean existsByResponsableId(Integer responsableId);
 }

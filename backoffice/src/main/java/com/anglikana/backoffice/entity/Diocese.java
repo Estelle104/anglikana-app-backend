@@ -2,10 +2,17 @@ package com.anglikana.backoffice.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
 import org.locationtech.jts.geom.Polygon;
 
 @Entity
 @Table(name = "diocese")
+// Suppression logique : les lignes à etat = -1 sont ignorées par toutes les requêtes JPA,
+// et deleteById passe etat à -1 au lieu de supprimer la ligne.
+@SQLRestriction("etat = 1")
+@SQLDelete(sql = "UPDATE diocese SET etat = -1 WHERE id = ?")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Diocese {
 
@@ -29,4 +36,10 @@ public class Diocese {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "responsable_id")
     private Clerge responsable;
+
+    /** 1 = actif, -1 = supprimé (suppression logique). Non exposé dans les DTO. */
+    @Builder.Default
+    @ColumnDefault("1")
+    @Column(nullable = false)
+    private Short etat = 1;
 }
