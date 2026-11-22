@@ -68,3 +68,23 @@ Fichiers impactés : `stack-technique.md` (§4 Sécurité : règles d'URL, RBAC 
 « protéger toute nouvelle route d'écriture ») et `INDEX.md` (périmètre de code de
 `securite-authentification.md` : `security/**`, `config/MethodSecurityConfig`,
 `controller/MoiController`, `repository/PerimetreRepository`, `dto/ProfilDTO`).
+
+## 2026-11-22 — `/register` public, endpoint temporaire de hachage, comptes de test
+Fichiers impactés : `securite-authentification.md`, `stack-technique.md`, `generalite.md`,
+`module-ressource.md`, `structure-backoffice.md`, `tests.md`. Changements :
+- `POST /api/auth/register` redevient public (`@LevelRequired(5)` retiré, `permitAll`) ;
+- endpoint temporaire `POST /api/outils/hash` (`OutilController`), public, à supprimer ;
+- `400-data.sql` : Archidiacre (clergé 6, région 1), Presbytère (clergé 7, paroisse 1), clergé 8 sans
+  responsabilité, 2 types de ressource, 1 ressource, 7 comptes de test couvrant les 5 niveaux ;
+- 107 tests.
+
+Écarts ajoutés : `/register` public, `register` en 500 sans `clergeId` ou pour un clergé déjà doté
+d'un compte, endpoint temporaire public, comptes au mot de passe connu sur toute base neuve. Écarts
+reformulés : types de ressource (`module-ressource.md`), données vides de `400-data.sql`
+(`generalite.md`). La procédure « premier compte en SQL » est remplacée par les comptes de test.
+
+## 2026-11-22 — Suppression de l'endpoint temporaire de hachage
+Fichiers impactés : `securite-authentification.md`, `stack-technique.md`, `structure-backoffice.md`,
+`tests.md`. L'endpoint `POST /api/outils/hash` (`OutilController`), sa règle `permitAll` et son test
+sont supprimés après validation des comptes de test : 13 contrôleurs, 104 tests. L'écart « endpoint
+temporaire public » est retiré ; les comptes de test de `400-data.sql` restent.

@@ -7,8 +7,6 @@ import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Utilisateur;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.UtilisateurRepository;
-import com.anglikana.backoffice.config.OpenApiConfig;
-import com.anglikana.backoffice.security.LevelRequired;
 import com.anglikana.backoffice.security.UtilisateurConnecte;
 import com.anglikana.backoffice.service.JwtService;
 
@@ -16,7 +14,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -30,7 +27,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = {"http://localhost:4200", "http://127.0.0.1:4200", "http://localhost:8084", "http://127.0.0.1:8084"}, allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
-@Tag(name = "Authentification", description = "Connexion par JWT et déconnexion (routes publiques), création de compte (niveau 5)")
+@Tag(name = "Authentification", description = "Connexion par JWT, création de compte et déconnexion (routes publiques)")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -84,17 +81,14 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    @LevelRequired(5)
     @Operation(summary = "Créer un compte",
-            description = "Réservé au niveau 5 (Évêque). Crée un compte actif rattaché à un membre du clergé actif (clergeId) ; "
+            description = "Lecture publique. Crée un compte actif rattaché à un membre du clergé actif (clergeId) ; "
                     + "le mot de passe est enregistré en BCrypt. Le compte reçoit les droits de ce clergé : niveau de son rôle "
                     + "et entités dont il est responsable.")
-    @SecurityRequirement(name = OpenApiConfig.BEARER_SECURITY_SCHEME)
     @ApiResponse(responseCode = "201", description = "Compte créé (message de confirmation)",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     @ApiResponse(responseCode = "400", description = "Clergé introuvable (ou supprimé) pour l'id fourni",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
-    @ApiResponse(responseCode = "403", description = "Jeton absent ou niveau 5 requis", content = @Content)
     @ApiResponse(responseCode = "409", description = "Ce nom d'utilisateur existe déjà",
             content = @Content(mediaType = "text/plain", schema = @Schema(implementation = String.class)))
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {

@@ -27,7 +27,7 @@ tests (noms de méthodes en phrases françaises, `preparer()`, etc.) est décrit
 | `sprint2/JeuDonneesHierarchie` | jeu de données | — | Arbre isolé : 1 diocèse, 2 régions, 2 districts, 2 paroisses, 4 églises placées dans, sur et hors d'un carré de référence, 2 ressources ; responsables A, B, C, X |
 | `security/PerimetreAuthorizationManagerTest` | unitaire, mock de `PerimetreRepository` | 15 | `@LevelRequired`, responsable direct, cascade, hors périmètre, anonyme, compte désactivé, entité introuvable (`404`), `id` nul, entité calculée (`entityExpression`), cibles multiples |
 | `security/WithUtilisateurConnecte` (+ `…Factory`) | annotation de test | — | Place un `UtilisateurConnecte` (`clergeId`, `niveau`) dans le contexte, à la place de `@WithMockUser` |
-| `sprint3/Sprint3ControllerTest` | `@WebMvcTest` + `HierarchieService` réel | 17 | Doyen dans et hors de son district, changement de diocèse d'une région, parent absent (`403`) ou introuvable (`404`), opérations de niveau 5, `/register` protégé, refus `409`, suppression logique, `/api/moi`, lectures publiques |
+| `sprint3/Sprint3ControllerTest` | `@WebMvcTest` + `HierarchieService` réel | 17 | Doyen dans et hors de son district, changement de diocèse d'une région, parent absent (`403`) ou introuvable (`404`), opérations de niveau 5, `/register` public (`201` sans jeton, `409` nom pris), refus `409`, suppression logique, `/api/moi`, lectures publiques |
 | `sprint3/Sprint3PostgisIntegrationTest` | `@DataJpaTest` sur base réelle | 8 | `chaineResponsables`, `racines`, suppression logique (`etat = -1`) ignorée par JPA, statistiques, géographie et périmètre ; seules les filles directes comptent ; clergé responsable puis supprimé |
 
 **Configuration de `Sprint2PostgisIntegrationTest`** :
@@ -53,7 +53,8 @@ tests (noms de méthodes en phrases françaises, `preparer()`, etc.) est décrit
 - Prérequis de `BackofficeApplicationTests` et des deux suites `*PostgisIntegrationTest` : une base
   PostgreSQL/PostGIS accessible à l'URL de `application.properties` (`localhost:5432`), avec les
   migrations V2 et V3 appliquées ([generalite.md](generalite.md)).
-- Le 2026-11-20, les 104 tests passent sur une base neuve construite par `database/` puis V2 et V3.
+- Le 2026-11-22, les tests passent sur une base neuve construite par `database/` (comptes de test
+  compris). Le 2026-11-20, ils avaient aussi été joués après V2 et V3.
   Ils ont été lancés dans un conteneur JDK 21, avec `SPRING_DATASOURCE_URL` qui pointe sur
   `eem-database`.
 - Couverture : les règles des sprints 1 à 3 (géographie, tableau de bord, droits, suppression logique)
@@ -71,6 +72,10 @@ tests (noms de méthodes en phrases françaises, `preparer()`, etc.) est décrit
   sécurité sont dans un paquet de domaine (`security/`).
 
 ## Dernière mise à jour
+
+2026-11-22 — Retrait d'`OutilControllerTest` (endpoint temporaire supprimé) ; 104 tests.
+
+2026-11-22 — `OutilControllerTest`, tests du `register` public ; 107 tests.
 
 2026-11-20 — Sprint 3 : `PerimetreAuthorizationManagerTest`, `Sprint3ControllerTest`, `Sprint3PostgisIntegrationTest`, `@WithUtilisateurConnecte` ; `Sprint2*` adaptés (fin d'ADMIN, aperçu restreint) ; prérequis V3.
 

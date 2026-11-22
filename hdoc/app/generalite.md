@@ -69,7 +69,25 @@ ordre alphabétique, **uniquement à la création du volume** `eem-postgres-data
 | `001-init.sql` | 0xx — initialisation | Extensions `postgis` (types `GEOMETRY`) et `unaccent` (recherche sans accents) |
 | `002-table.sql` | 0xx — tables | `role`, `clerge`, `diocese`, `region`, `district`, `paroisse`, `eglise`, `horaire_culte`, `type_ressource`, `ressource`, `utilisateur`, `contribution`, `photo` ; contraintes `fk_<table>_<cible>` en bas de chaque `CREATE TABLE` ; colonne `etat` (`ck_<table>_etat`) sur `clerge` et les tables de la hiérarchie et des ressources ; `role.niveau` NOT NULL, UNIQUE, entre 1 et 5 |
 | `300-index.sql` | 3xx — index | Index polymorphes (`photo`, `contribution`), index des clés étrangères hiérarchiques, index GIST sur `carte_qgis` et `eglise.localisation`, index partiels `idx_<table>_responsable_actif` (`WHERE etat = 1`) |
-| `400-data.sql` | 4xx — données | Jeu de démonstration : 5 rôles (Katekista 1 … Évêque 5, id = niveau), 5 membres du clergé, 2 diocèses, 2 régions, 2 districts, 2 paroisses, 2 églises localisées, horaires de culte ; recalage des séquences (`setval`) |
+| `400-data.sql` | 4xx — données | Jeu de démonstration : 5 rôles (Katekista 1 … Évêque 5, id = niveau), 8 membres du clergé, 2 diocèses, 2 régions, 2 districts, 2 paroisses, 2 églises localisées, horaires de culte, 2 types de ressource, 1 ressource, 7 comptes de test ; recalage des séquences (`setval`) |
+
+**Responsables et comptes de test de `400-data.sql`** (un compte par responsable, mot de passe commun
+donné en commentaire dans le fichier) :
+
+| Clergé | Rôle (niveau) | Responsable de | Compte |
+|---|---|---|---|
+| 1 | Évêque (5) | diocèse 1 | `eveque.antananarivo` |
+| 2 | Évêque (5) | diocèse 2, région 2 | `eveque.toamasina` |
+| 6 | Archidiacre (4) | région 1 | `archidiacre.analamanga` |
+| 3 | Doyen (3) | district 1, église 1, ressource 1 | `doyen.tana` |
+| 4 | Doyen (3) | district 2, paroisse 2 | `doyen.toamasina` |
+| 7 | Presbytère (2) | paroisse 1 | `presbytere.saintjoseph` |
+| 5 | Katekista (1) | église 2 | `katekista.saintetherese` |
+| 8 | Katekista (1) | rien | aucun (pour tester la suppression d'un clergé et `/register`) |
+
+La ressource 1 (église 1) rend `DELETE /api/eglises/1` impossible (`409`) tant qu'elle est active. Ces
+données ne sont chargées que sur une base neuve : `docker compose down -v` puis `up` (le `-v` efface
+le volume, donc toutes les données existantes).
 
 **Migrations pour une base existante** (`backoffice/migrations/`, appliquées à la main) :
 
@@ -119,13 +137,16 @@ schéma : migration, réexécution, rollback, puis nouvelle migration.
   base en dehors de `database/` et `migrations/`. Exemple : sur une base sans V3, il ajoute lui-même la
   colonne `etat` (défaut 1, grâce à `@ColumnDefault`), mais ni les contraintes ni les nouveaux rôles.
   V3 reste donc nécessaire.
-- Dans `400-data.sql`, `type_ressource`, `ressource`, `utilisateur`, `contribution` et `photo` n'ont
-  aucune donnée. Aucun compte utilisateur n'est donc créé à l'initialisation.
+- Dans `400-data.sql`, `contribution` et `photo` n'ont aucune donnée.
+- **Comptes de test au mot de passe connu dans `400-data.sql`** : ils sont créés sur toute base neuve,
+  y compris en production. Aucun profil ne les sépare des données de démonstration.
 - Les autres écarts de style sont listés dans [conventions-code.md §15](conventions-code.md).
 - Swagger UI et `/v3/api-docs` sont actifs sans condition (aucun profil) ; springdoc conseille de les
   désactiver en production (`springdoc.api-docs.enabled=false`, `springdoc.swagger-ui.enabled=false`).
 
 ## Dernière mise à jour
+
+2026-11-22 — `400-data.sql` : clergés 6 à 8, ressources, 7 comptes de test (tableau des responsables).
 
 2026-11-20 — Migration V3 (RBAC, `etat`), scripts `database/` mis à jour, état du sprint 3, 57 endpoints.
 

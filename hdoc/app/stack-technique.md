@@ -90,7 +90,7 @@ Starters déclarés : `data-jpa`, `security`, `oauth2-resource-server`, `validat
 
 **Règles actuelles :**
 - Sans état (pas de session), CSRF désactivé, CORS configuré.
-- `POST /api/auth/login` et `/logout` : accès public ; `/register` exige le niveau 5.
+- `POST /api/auth/login`, `/register` et `/logout` : accès public.
 - `GET /api/tableau-bord/**` et `/api/moi` : authentification exigée.
 - Autres `GET /api/**` : accès public.
 - `/v3/api-docs/**`, `/swagger-ui/**`, `/swagger-ui.html` : accès public (Swagger).

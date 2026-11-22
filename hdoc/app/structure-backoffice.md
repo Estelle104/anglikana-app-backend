@@ -123,6 +123,10 @@ ni package `exception`, ni configuration Jackson. Le seul `@RestControllerAdvice
 
 ## Dernière mise à jour
 
+2026-11-22 — Suppression d'`OutilController` (temporaire) ; 13 contrôleurs.
+
+2026-11-22 — Ajout de `OutilController` (temporaire, hachage BCrypt) ; 14 contrôleurs.
+
 2026-11-20 — Sprint 3 : package `security/`, `config/MethodSecurityConfig`, `MoiController`, `PerimetreRepository`, `ProfilDTO` ; inventaire mis à jour.
 
 2026-11-20 — Ajout de `config/OpenApiConfig` (Swagger) ; contrôleurs annotés.

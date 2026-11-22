@@ -63,8 +63,7 @@ public class SecurityConfig {
             .sessionManagement(session ->
                     session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                    // /api/auth/register exige le niveau 5 (@LevelRequired) : il n'est plus public.
-                    .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/logout").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register", "/api/auth/logout").permitAll()
                     .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     // Lectures du back-office : jeton requis, périmètre vérifié par les annotations.
                     // Déclarées avant la règle GET /api/** qui ouvre le reste au public (application mobile).

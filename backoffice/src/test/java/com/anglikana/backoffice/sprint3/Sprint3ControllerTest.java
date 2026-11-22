@@ -11,10 +11,12 @@ import com.anglikana.backoffice.controller.ParoisseController;
 import com.anglikana.backoffice.controller.RegionController;
 import com.anglikana.backoffice.dto.NiveauHierarchique;
 import com.anglikana.backoffice.dto.ReferenceEntiteDTO;
+import com.anglikana.backoffice.entity.Clerge;
 import com.anglikana.backoffice.entity.Diocese;
 import com.anglikana.backoffice.entity.District;
 import com.anglikana.backoffice.entity.Paroisse;
 import com.anglikana.backoffice.entity.Region;
+import com.anglikana.backoffice.entity.Utilisateur;
 import com.anglikana.backoffice.repository.ClergeRepository;
 import com.anglikana.backoffice.repository.DioceseRepository;
 import com.anglikana.backoffice.repository.DistrictRepository;
@@ -180,19 +182,23 @@ class Sprint3ControllerTest {
     }
 
     @Test
-    void creationDeCompteRefuseeSansAuthentification() throws Exception {
+    void creationDeComptePubliqueSansJeton() throws Exception {
+        when(clergeRepository.findById(8)).thenReturn(Optional.of(Clerge.builder().id(8).nom("Sans responsabilité").build()));
+
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nomUtilisateur\": \"x\", \"motDePasse\": \"y\", \"clergeId\": 1}"))
-                .andExpect(status().isForbidden());
-        verify(utilisateurRepository, never()).save(any());
+                        .content("{\"nomUtilisateur\": \"nouveau\", \"motDePasse\": \"password123\", \"clergeId\": 8}"))
+                .andExpect(status().isCreated());
+        verify(utilisateurRepository).save(any(Utilisateur.class));
     }
 
     @Test
-    @WithUtilisateurConnecte(clergeId = 3, niveau = 3)
-    void creationDeCompteRefuseeSousLeNiveauCinq() throws Exception {
+    void creationDeCompteNomDejaPris() throws Exception {
+        when(utilisateurRepository.existsByNomUtilisateur("doyen.tana")).thenReturn(true);
+
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nomUtilisateur\": \"x\", \"motDePasse\": \"y\", \"clergeId\": 1}"))
-                .andExpect(status().isForbidden());
+                        .content("{\"nomUtilisateur\": \"doyen.tana\", \"motDePasse\": \"password123\", \"clergeId\": 3}"))
+                .andExpect(status().isConflict())
+                .andExpect(content().string("Ce nom d'utilisateur existe déjà"));
         verify(utilisateurRepository, never()).save(any());
     }
 

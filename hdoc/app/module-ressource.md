@@ -71,15 +71,16 @@ testé.
 
 - **`localisation` n'est ni exposée ni saisissable** : la colonne existe (Point 4326) mais
   `RessourceDTO` ne la contient pas, et `appliquerDTO` ne l'écrit jamais.
-- **Aucun type de ressource à l'initialisation** : `400-data.sql` n'insère rien dans
-  `type_ressource`, et aucune API ne permet d'en créer. Créer une ressource est donc impossible sur une
-  base neuve sans insertion SQL manuelle.
+- **Types de ressource non gérables par l'API** : `400-data.sql` fournit `École` et `Dispensaire`,
+  mais aucune route ne permet d'en ajouter. Un nouveau type demande une insertion SQL.
 - **Type absent ou inconnu ⇒ erreur 500** : la contrainte `NOT NULL` est violée et l'erreur n'est pas
   traduite. Contrairement aux contrôleurs de la hiérarchie, `RessourceController` n'a aucun
   `try/catch`. Une église absente (`403`) ou inconnue (`404`) est désormais refusée par le contrôle
   d'accès, avant l'écriture.
 
 ## Dernière mise à jour
+
+2026-11-22 — `400-data.sql` fournit 2 types de ressource et 1 ressource (église 1) : l'écart « aucun type à l'initialisation » est reformulé.
 
 2026-11-20 — Sprint 3 : accès par responsable (église ou ancêtre), suppression logique (`etat`).
 

@@ -26,7 +26,7 @@ de bord et `/api/moi`.
 |---|---|
 | CSRF | désactivé |
 | Session | `SessionCreationPolicy.STATELESS` |
-| `POST /api/auth/login`, `POST /api/auth/logout` | `permitAll` (`/register` n'est plus public) |
+| `POST /api/auth/login`, `POST /api/auth/register`, `POST /api/auth/logout` | `permitAll` |
 | `OPTIONS /**` | `permitAll` (requêtes préliminaires CORS) |
 | `GET /api/tableau-bord`, `/api/tableau-bord/**`, `/api/moi` | `authenticated`, déclarées avant la règle suivante |
 | `GET /api/**` | `permitAll` |
@@ -116,7 +116,7 @@ pour un responsable. `200` ; `403` sans jeton.
 | Verbe | Route | Corps | Réponses |
 |---|---|---|---|
 | `POST` | `/login` | `LoginRequest { nomUtilisateur, motDePasse }` | `200 LoginResponse { token, nomUtilisateur, role, niveau }` (`role` = nom du rôle, ex. `Doyen`) ; `401` texte si identifiants incorrects ou compte désactivé |
-| `POST` | `/register` | `RegisterRequest { nomUtilisateur, motDePasse, clergeId }` | `@LevelRequired(5)` : `201` texte ; `403` sans jeton ou sous le niveau 5 ; `409` si le nom existe déjà ; `400` si le clergé est introuvable ou supprimé |
+| `POST` | `/register` | `RegisterRequest { nomUtilisateur, motDePasse, clergeId }` | public : `201` texte ; `409` si le nom existe déjà ; `400` si le clergé est introuvable ou supprimé |
 | `POST` | `/logout` | — | `200` texte : le serveur ne fait rien, le client supprime son jeton |
 
 `register` encode le mot de passe en BCrypt, crée le compte avec `actif = true` et le rattache au clergé.
@@ -149,7 +149,7 @@ Rôles fournis par `400-data.sql` et par la migration V3 (id = niveau) : `Kateki
 | Créer un enfant (région, district, paroisse, église, ressource) | `@NeedAuthorisation(entity = <parent>, id = "#dto.<parent>Id") @CascadeAuthorised` |
 | Modifier ou supprimer une entité ou une ressource | `@NeedAuthorisation(entity = <entité>, id = "#id") @CascadeAuthorised` (diocèse : sans cascade, il n'a pas d'ancêtre) |
 | Changer de parent lors d'un `PUT` | en plus, `AutorisationService.verifier(<parent>, <nouveauId>, true)` dans le contrôleur |
-| Créer un diocèse, CRUD du clergé, `POST /api/auth/register`, `PUT /api/geographie/{niveau}/limites`, `GET /api/test/admin-only` | `@LevelRequired(5)` |
+| Créer un diocèse, CRUD du clergé, `PUT /api/geographie/{niveau}/limites`, `GET /api/test/admin-only` | `@LevelRequired(5)` |
 | `GET /api/tableau-bord/{niveau}/{id}` et `/statistiques` | `@NeedAuthorisation(entityExpression = "#niveau", id = "#id") @CascadeAuthorised` |
 | `GET /api/tableau-bord` (aperçu) | `@LevelRequired(5)`, limité aux diocèses dont le compte est responsable |
 
@@ -183,12 +183,15 @@ Détail des routes et de leurs réponses dans les fichiers de chaque domaine.
 
 ## État actuel connu
 
-- Connexion, inscription (niveau 5) et déconnexion côté client sont fonctionnelles.
+- Connexion, inscription (publique) et déconnexion côté client sont fonctionnelles.
 - RBAC du sprint 3 en place : niveaux 1 à 5 et périmètre par responsable. Il est testé par
   `PerimetreAuthorizationManagerTest`, `Sprint3ControllerTest` et `Sprint3PostgisIntegrationTest`
   ([tests.md](tests.md)), et vérifié de bout en bout le 2026-11-20 sur une base neuve.
-- **Premier compte** : `/register` exigeant le niveau 5, le premier compte d'un Évêque se crée en SQL.
-  Il faut insérer dans `utilisateur` un hash BCrypt et le `clerge_id` d'un clergé de rôle `Évêque`.
+- **Comptes de test** : `400-data.sql` crée 7 comptes, un par responsable, couvrant les 5 niveaux
+  (`eveque.antananarivo`, `eveque.toamasina`, `archidiacre.analamanga`, `doyen.tana`,
+  `doyen.toamasina`, `presbytere.saintjoseph`, `katekista.saintetherese`), avec un mot de passe
+  commun (voir le commentaire du fichier). Données détaillées : [generalite.md](generalite.md).
+  Vérifiés le 2026-11-22 : connexion, niveau et racines de `/api/moi` corrects pour chacun.
 - Aucun refresh token, aucune révocation, aucune protection contre la force brute.
 
 ## Écarts connus avec le code / dette identifiée
@@ -199,6 +202,12 @@ Détail des routes et de leurs réponses dans les fichiers de chaque domaine.
   8084) en plus de la configuration globale de `SecurityConfig`.
 - `jwt.secret` écrit en clair dans `application.properties` et recopié dans `JwtServiceTest`
   ([generalite.md](generalite.md)).
+- **`POST /api/auth/register` est public** (choix du 2026-11-22) : n'importe qui peut créer un compte
+  rattaché à un clergé actif qui n'a pas encore de compte, et hériter de ses droits, niveau 5 compris.
+- **`register` répond `500` dans deux cas** : `clergeId` absent (`findById(null)`), et clergé qui a déjà
+  un compte (contrainte UNIQUE sur `utilisateur.clerge_id`).
+- **Comptes au mot de passe connu** chargés par `400-data.sql` sur toute base neuve, y compris en
+  production.
 - **Rollback V3 approximatif** : `V3__sprint3_rbac_rollback.sql` fait les correspondances suivantes.
   L'ancien rôle exact d'un clergé n'est pas conservé :
   - Évêque → Admin ;
@@ -215,6 +224,10 @@ Détail des routes et de leurs réponses dans les fichiers de chaque domaine.
 - `PasswordEncoderTest` ne fait aucune assertion : il affiche un hash avec `System.out.println`.
 
 ## Dernière mise à jour
+
+2026-11-22 — Suppression de l'endpoint temporaire `POST /api/outils/hash` (`OutilController`) après validation des comptes de test.
+
+2026-11-22 — `/api/auth/register` redevenu public ; endpoint temporaire `POST /api/outils/hash` ; comptes de test de `400-data.sql` à la place du premier compte créé en SQL.
 
 2026-11-20 — RBAC du sprint 3 : niveaux 1 à 5, périmètre par `responsable_id`, annotations `@LevelRequired` / `@NeedAuthorisation` / `@CascadeAuthorised`, `GET /api/moi`, `/register` réservé au niveau 5, fin du rôle ADMIN, compte désactivé si le clergé est supprimé.
 
